@@ -1,93 +1,80 @@
-# Laser Pipeline: Onshape → VLS 4.60, no Illustrator
+# Laser Station: Onshape → VLS 4.60, no Illustrator, no API
 
-Paste an Onshape Part Studio link. The pipeline pulls every 6 mm plate's flat profile, nests them onto
-plywood sheets, scores each part's name, shows a preview, and prints straight to the Universal Laser
-(UCP) driver. You load wood, focus and press Start.
-
-```
-Onshape Part Studio ──(1 API call, FeatureScript)──▶ flat outlines + holes (mm)
-   ──▶ kerf compensation ──▶ nesting (MaxRects, 90° rotation) ──▶ part-name labels
-   ──▶ sheetN.dxf / sheetN.svg / preview.html
-   ──▶ GDI hairline vectors ──▶ ULS printer driver ──▶ UCP queue ──▶ laser
-```
-
-The old route was Onshape → drawing → DXF → Illustrator (hairline + red) → Print → UCP. Illustrator was
-only there to set line colours and widths, and then to "print" to the ULS driver. This prints red hairline
-vectors to that driver itself.
-
-## Use it
-
-Double-click **`Laser It.bat`**, paste the Part Studio link, check the preview, type `y`.
-
-Or from a terminal:
+Any team exports their plates from Onshape, opens the file in **Laser Station** on the laser PC, checks
+where the parts land on the plywood that's already in the laser, answers one question, and it cuts.
 
 ```
-python laser.py "<part studio link>"                      # preview, then asks before sending
-python laser.py "<link>" --qty "Frame Plate +Y=2" --qty "Frame Plate -Y=2"
-python laser.py "<link>" --qty "*=2" --kerf 0.15 --yes    # 2 of everything, no prompt
-python laser.py "<link>" --only "frame plate" --sheet 24x12in
-python laser.py "<link>" --cached --yes                   # resend the last job, 0 Onshape calls
-python laser.py --setup                                    # save laser material settings once
+Onshape: right-click Part Studio tab > Export > STEP      (or a face / drawing exported as DXF)
+   ──▶ Laser Station reads every part, keeps the 6 mm ones, measures thickness, flags pockets
+   ──▶ kerf compensation ──▶ nests the parts into the wood that's still free on the shared sheet
+   ──▶ scores each part's name ──▶ safety checks ──▶ "Ready to fire?" ──▶ ULS driver ──▶ UCP Start
+   ──▶ the cut parts are marked on the sheet map for the next team
 ```
 
-Each job lands in `jobs/<date-time>-<tab>/` with `sheetN.dxf` (layers CUT = red, ENGRAVE = blue),
-`sheetN.svg` and `preview.html`. The DXFs still open in Illustrator or Inkscape if you ever want them.
+There's no Onshape API, no keys and no internet. Everything runs on the laser PC.
 
-| Flag | What it does |
+## Using it
+
+1. In Onshape, right-click the Part Studio tab that has your plates, then **Export…** → Format **STEP** → OK.
+   It downloads a `.step` with every part and its name. (A single plate also works as a DXF: right-click
+   its big flat face → **Export as DXF/DWG**.)
+2. On the laser PC, double-click **Laser Station.bat**, type your team name, then click **Open STEP / DXF…**
+3. Check the layout. **Grey** = wood other teams already cut. **Red** = your cuts. **Blue** = part names.
+   Double-click a part to change how many you need.
+4. Click **CUT ▸ FIRE**. Answer the one question (wood matches the map, focus set, lid closed, exhaust on,
+   you'll stay). The job goes to the laser and UCP's Start is pressed for you.
+5. When someone puts a fresh sheet in, click **New sheet loaded**. If a cut never happened (cancelled in
+   UCP, power cut), click **Undo last cut** so that wood isn't counted as used.
+
+If a job doesn't fit in the free wood, the extra parts go on "Sheet 2 · NEEDS A NEW SHEET". After sheet 1
+finishes, swap the wood and press FIRE again.
+
+## What stops mistakes
+
+| Check | What happens |
 |---|---|
-| `--qty "Name=N"` | how many of a part (repeatable); `"*=N"` sets every part |
-| `--only a,b` | only parts whose names contain these words |
-| `--sheet 24x18in` | material size (default = full VLS 4.60 bed, 609.6 × 457.2 mm) |
-| `--thickness 6` | only parts this thick, ±0.8 mm (`0` = any); skips motors, brackets, etc. |
-| `--kerf 0.15` | grows outlines and shrinks holes by half the beam width |
-| `--no-labels` | don't score part names |
-| `--printer "name"` | printer name, if auto-find (VLS / ULS / Universal) picks the wrong one |
-| `--no-send` | files + preview only |
-| `--to-pdf DIR` | print through Microsoft Print to PDF instead (testing without the laser) |
+| Part runs off the sheet | **blocked**, won't send |
+| Part would land on wood that's already cut, or on another part | **blocked** |
+| Same files + quantities sent in the last 30 min | asks "already cut, again?" |
+| Part isn't 6 mm (motor, bracket, spacer…) | skipped, listed in the notes |
+| Plate has pockets / steps / chamfers (STEP only) | warning: they'd be cut straight through |
+| Edges that don't join into a closed outline | warning, and those edges are left out |
+| Part bigger than the bed | left out, listed in red |
+| DXF with no units | warning, assumes mm |
+| Laser fires | only after the "Ready to fire?" question is answered Yes |
 
-Defaults (sheet size, margins, colours, kerf) live in `config.json`.
+## Command line (same engine)
 
-## Set up the school laser PC (once)
+```
+python laser.py plates.step --team 7831 --qty "Frame Plate +Y=2"
+python laser.py plate.dxf --dxf-units in --no-send
+python laser.py --new-sheet
+python laser.py --setup            (open the ULS driver's own settings once and save them)
+```
 
-1. Install Python 3.11+ from python.org (tick "Add to PATH").
-2. In this folder: `python -m pip install -r requirements.txt`
-3. Copy `.env.example` to `.env` and paste the Onshape API keys (Onshape → My account → Developer → API keys).
-   The keys must belong to the account that owns the document. The site (cad.onshape.com or a school
-   `*.onshape.com`) is read from the link.
-4. Match UCP's colour mapping: in UCP, set **red (255, 0, 0)** to your 6 mm plywood **vector cut** and
-   **blue (0, 0, 255)** to a light **vector score** for the labels. Or use a UCP material-database entry for
-   6 mm plywood. If your shop already uses other colours, change `cut_rgb` / `engrave_rgb` in `config.json`.
-5. Optional: `python laser.py --setup` opens the ULS driver's own settings window. Whatever you choose
-   there is saved to `printer_settings.json` and reused for every job.
+## Settings: `config.json` (put per-PC changes in `config.local.json`)
 
-### First test at school (things only the real laser can check)
-
-- [ ] `python laser.py "<link>" --no-send`: preview looks right.
-- [ ] Send one small part. In UCP's viewer it should show as **vector** lines, not a raster image.
-- [ ] Sheet origin and orientation in UCP match the bed (top-left = laser home). If it's mirrored or
-      rotated, note what you see; it's one line to fix.
-- [ ] Measure a cut M4 hole and the plate's outside size, then set `kerf_mm` in `config.json`.
-- [ ] If UCP ignores `--setup` settings (some versions keep materials only in the UCP app), skip
-      `--setup` and use UCP's material database instead.
-
-## How the Onshape part works
-
-`laserpipe/onshape.py` sends one FeatureScript to the Part Studio (`POST .../featurescript`). For each solid it
-takes the largest planar face, measures thickness with a tight box in that face's frame, and returns the face's
-edges in 2D: lines as end points, circles and arcs as centre + radius + samples, splines as dense samples.
-`geometry.py` rebuilds true arcs (0.01 mm chord error), joins edges into loops, sorts outline vs holes, applies
-kerf, and turns each part so its smallest bounding rectangle lies flat. That costs one call per Part Studio, logged
-to `api_calls.log`, and it refuses to run near `ONSHAPE_CALL_LIMIT` (default 2,500, the free-account yearly cap).
-`--cached` re-runs with zero calls.
-
-Limits: blind pockets on the big face would be cut through (laser plates don't normally have any). One link = one
-Part Studio; for parts spread over several tabs, run it once per tab.
+| Key | Default | Meaning |
+|---|---|---|
+| `sheet_mm` | 609.6 × 457.2 | plywood size (VLS 4.60 full bed = 24 × 18 in) |
+| `margin_mm` / `gap_mm` | 5 / 4 | edge margin, space between parts |
+| `thickness_mm` / `thickness_tol_mm` | 6 / 0.8 | which parts count as plates |
+| `kerf_mm` | 0 | beam width; outlines grow and holes shrink by half of it |
+| `cut_rgb` / `engrave_rgb` | red / blue | must match UCP's colour → power/speed rows |
+| `printer` | auto | finds the printer with VLS / ULS / Universal in its name |
+| `auto_start` | true | press UCP's Start after sending |
+| `ucp_start_button` | auto | exact button name if auto-find misses it (see `ucp_controls.txt`) |
+| `test_pdf_dir` | null | set a folder to "print" to PDF instead of the laser (testing) |
 
 ## Files
 
+- `station.pyw`: the Laser Station window
 - `laser.py`: command line
-- `laserpipe/onshape.py`: API call + FeatureScript
-- `laserpipe/geometry.py`: edges → polygons, kerf, orientation
-- `laserpipe/nest.py`: sheet packing
+- `laserpipe/importers.py`: STEP (part names, thickness, pocket check) and DXF readers
+- `laserpipe/geometry.py`: edges → outlines with holes, kerf, orientation
+- `laserpipe/nest.py`: packs parts around the used wood
+- `laserpipe/bed.py`: the shared sheet map + safety checks
 - `laserpipe/output.py`: labels, DXF, SVG, preview page
-- `laserpipe/vls_print.py`: hairline GDI printing to the ULS driver, saved driver settings
+- `laserpipe/vls_print.py`: hairline vector printing to the ULS driver
+- `laserpipe/ucp.py`: presses Start in UCP
+- `SCHOOL_SETUP.md`: install + first-test steps for the laser PC

@@ -85,13 +85,16 @@ def write_dxf(path: Path, sheet, cuts, marks):
     doc.saveas(path)
 
 
-def svg(sheet, cuts, marks, cut_rgb, mark_rgb, stroke=0.35) -> str:
+def svg(sheet, cuts, marks, cut_rgb, mark_rgb, stroke=0.35, used=()) -> str:
     def d(lp):
         return "M" + " L".join(f"{x:.3f},{sheet.h - y:.3f}" for x, y in lp) + " Z"
 
     c = "#%02x%02x%02x" % tuple(cut_rgb)
     m = "#%02x%02x%02x" % tuple(mark_rgb)
     body = [f'<rect x="0" y="0" width="{sheet.w:.2f}" height="{sheet.h:.2f}" class="sheet"/>']
+    for u in used:  # wood other jobs already cut
+        dd = " ".join(d(list(g.exterior.coords)) for g in getattr(u, "geoms", [u]) if hasattr(g, "exterior"))
+        body.append(f'<path d="{dd}" class="used"/>')
     body.append(f'<path d="{" ".join(d(lp) for lp in cuts)}" fill="none" stroke="{c}" stroke-width="{stroke}" fill-rule="evenodd"/>')
     if marks:
         body.append(f'<path d="{" ".join(d(lp) for lp in marks)}" fill="none" stroke="{m}" stroke-width="{stroke * 0.6}"/>')
@@ -103,14 +106,17 @@ def cut_length(loops) -> float:
     return sum(math.dist(a, b) for lp in loops for a, b in zip(lp, lp[1:] + lp[:1]))
 
 
-def preview_html(job: str, source: str, sheets_svg: list, parts, too_big, stats: list, settings: dict) -> str:
+def preview_html(job: str, source: str, sheets_svg: list, parts, too_big, stats: list, settings: dict, notes=()) -> str:
     rows = "".join(
         f"<tr><td>{html.escape(p.name)}</td><td>{p.qty}</td><td>{p.size[0]:.1f} × {p.size[1]:.1f}</td>"
         f"<td>{p.thickness:.2f}</td><td>{html.escape('; '.join(p.warnings)) or '—'}</td></tr>" for p in parts)
     big = "".join(f"<li>{html.escape(p.name)} ({p.size[0]:.0f} × {p.size[1]:.0f} mm) is bigger than the sheet</li>" for p in too_big)
+    big += "".join(f"<li>{html.escape(n)}</li>" for n in notes)
     cards = "".join(
         f'<section class="card"><h2>Sheet {i + 1} <span>{st["parts"]} parts · {st["cut_m"]:.2f} m of cut · '
-        f'{st["fill"]:.0f}% used</span></h2><div class="sv">{s}</div></section>' for i, (s, st) in enumerate(zip(sheets_svg, stats)))
+        f'{st["fill"]:.0f}% used · {"LOAD NEW WOOD" if st.get("new_wood") else "wood in the laser now"}</span></h2>'
+        + "".join(f'<p class="warn">BLOCKED: {html.escape(e)}</p>' for e in st.get("errors", []))
+        + f'<div class="sv">{s}</div></section>' for i, (s, st) in enumerate(zip(sheets_svg, stats)))
     setting = " · ".join(f"{k}: {html.escape(str(v))}" for k, v in settings.items())
     return f"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{html.escape(job)} laser job</title><style>
@@ -120,12 +126,12 @@ body{{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,Sego
 main{{max-width:1100px;margin:0 auto;padding:24px 16px}} h1{{margin:0 0 4px;font-size:24px}}
 .mut{{color:var(--mut)}} .card{{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin:16px 0}}
 h2{{margin:0 0 10px;font-size:17px}} h2 span{{font-weight:400;color:var(--mut);font-size:14px;margin-left:8px}}
-.sv svg{{width:100%;height:auto;display:block}} .sheet{{fill:var(--wood);stroke:var(--mut);stroke-width:.4}}
+.sv svg{{width:100%;height:auto;display:block}} .sheet{{fill:var(--wood);stroke:var(--mut);stroke-width:.4}} .used{{fill:var(--mut);opacity:.45}}
 table{{width:100%;border-collapse:collapse;font-size:14px}} td,th{{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}}
 .warn{{color:#b3261e}} code{{font-size:13px}}</style></head><body><main>
 <h1>{html.escape(job)}</h1><div class="mut">{html.escape(source)}</div><div class="mut">{setting}</div>
 {f'<ul class="warn">{big}</ul>' if big else ''}
 {cards}
 <section class="card"><h2>Parts</h2><table><tr><th>Part</th><th>Qty</th><th>Size (mm)</th><th>Thickness</th><th>Notes</th></tr>{rows}</table></section>
-<p class="mut">Red = cut through. Blue = vector score (part name). Holes are cut before outlines.</p>
+<p class="mut">Red = cut through. Blue = vector score (part name). Grey = wood other jobs already used. Holes are cut before outlines.</p>
 </main></body></html>"""

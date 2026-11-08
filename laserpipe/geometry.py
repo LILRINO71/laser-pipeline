@@ -94,6 +94,10 @@ def min_area_rotation(poly: Polygon) -> float:
 def build_part(raw: dict, kerf: float = 0.0) -> Part:
     loops, left = chain_loops(raw["edges"])
     warnings = []
+    if raw.get("volume") and raw.get("thk") and raw.get("area"):
+        ratio = raw["volume"] / (raw["area"] * raw["thk"])
+        if ratio < 0.97:
+            warnings.append(f"not a flat plate ({ratio:.0%} solid): pockets, steps or chamfers will be cut straight through")
     if left:
         warnings.append(f"{left} edge(s) didn't join into a closed loop and were skipped")
     if not loops:
@@ -114,4 +118,4 @@ def build_part(raw: dict, kerf: float = 0.0) -> Part:
     shape = affinity.rotate(shape, min_area_rotation(shape), origin="centroid")
     x0, y0, _, _ = shape.bounds
     shape = affinity.translate(shape, -x0, -y0)
-    return Part(raw["name"], shape, raw.get("thk", 0.0), 1, warnings)
+    return Part(raw["name"], shape, raw.get("thk") or 0.0, 1, warnings)

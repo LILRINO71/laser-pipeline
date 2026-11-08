@@ -29,6 +29,7 @@ class Sheet:
     w: float
     h: float
     placements: list = field(default_factory=list)
+    needs_new_wood: bool = True  # False only for the sheet already sitting in the laser
 
 
 class _MaxRects:
@@ -64,12 +65,23 @@ class _MaxRects:
             and (r != o or j < i) for j, o in enumerate(out))]
 
 
-def nest(parts, sheet_w, sheet_h, margin=5.0, gap=4.0, allow_rot=True):
-    """Returns (sheets, too_big). Coordinates are mm from the sheet's bottom-left corner."""
+def nest(parts, sheet_w, sheet_h, margin=5.0, gap=4.0, allow_rot=True, occupied=()):
+    """Returns (sheets, too_big). Coordinates are mm from the sheet's bottom-left corner.
+
+    occupied: shapes already cut out of the sheet in the laser now; sheet 1 packs around them,
+    any further sheets are fresh wood.
+    """
     uw, uh = sheet_w - 2 * margin + gap, sheet_h - 2 * margin + gap
     items = [(p, i) for p in parts for i in range(p.qty)]
     items.sort(key=lambda it: (-max(it[0].size), -it[0].poly.area))
     sheets, packers, too_big = [], [], []
+    if occupied:
+        first = _MaxRects(uw, uh)
+        for s in occupied:
+            x0, y0, x1, y1 = s.bounds
+            first.place(x0 - margin - gap / 2, y0 - margin - gap / 2, x1 - x0 + gap * 1.5, y1 - y0 + gap * 1.5)
+        sheets.append(Sheet(sheet_w, sheet_h, needs_new_wood=False))
+        packers.append(first)
     for part, i in items:
         w, h = part.size[0] + gap, part.size[1] + gap
         if not ((w <= uw and h <= uh) or (allow_rot and h <= uw and w <= uh)):
@@ -87,6 +99,7 @@ def nest(parts, sheet_w, sheet_h, margin=5.0, gap=4.0, allow_rot=True):
         _, fx, fy, rw, rh, rot = hit
         pk.place(fx, fy, rw, rh)
         sheet.placements.append(Placement(part, i, fx + margin, fy + margin, rot))
+    sheets = [s for s in sheets if s.placements]
     for s in sheets:  # cut order: left to right, bottom to top
         s.placements.sort(key=lambda p: (round(p.x / 50), p.y))
     return sheets, too_big

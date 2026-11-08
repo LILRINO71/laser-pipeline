@@ -1,7 +1,9 @@
-.env
 jobs/
-cache/
-api_calls.log
-printer_settings.json
 __pycache__/
 *.pyc
+sheet_state.json
+sheet_state.tmp
+station_prefs.json
+config.local.json
+printer_settings.json
+ucp_controls.txt
