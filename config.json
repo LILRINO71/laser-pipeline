@@ -1,0 +1,13 @@
+{
+  "_help": "Defaults for laser.py. Command-line flags override these. Sizes in mm.",
+  "sheet_mm": [609.6, 457.2],
+  "margin_mm": 5,
+  "gap_mm": 4,
+  "thickness_mm": 6.0,
+  "thickness_tol_mm": 0.8,
+  "kerf_mm": 0.0,
+  "labels": true,
+  "cut_rgb": [255, 0, 0],
+  "engrave_rgb": [0, 0, 255],
+  "printer": null
+}
