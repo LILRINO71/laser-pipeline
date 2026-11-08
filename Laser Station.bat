@@ -1,4 +1,7 @@
 @echo off
 cd /d "%~dp0"
-start "" pythonw station.pyw
-if errorlevel 1 python station.pyw
+if exist "python\pythonw.exe" (
+  start "" "python\pythonw.exe" -E -s station.pyw
+) else (
+  start "" pythonw station.pyw
+)

@@ -10,7 +10,7 @@ from shapely.geometry import Polygon
 from shapely.ops import unary_union
 from shapely.validation import make_valid
 
-CHORD_TOL = 0.01  # mm, max gap between a true arc and its polyline
+CHORD_TOL = 0.002  # mm, max gap between a true arc and its polyline (laser resolution is 0.025 mm)
 
 
 @dataclass

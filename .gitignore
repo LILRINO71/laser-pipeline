@@ -7,3 +7,4 @@ station_prefs.json
 config.local.json
 printer_settings.json
 ucp_controls.txt
+dist/

@@ -35,7 +35,7 @@ class Station(tk.Tk):
         prefs = self._prefs()
         self.team = tk.StringVar(value=prefs.get("team", ""))
         self.thk = tk.StringVar(value=str(self.cfg["thickness_mm"]))
-        self.kerf = tk.StringVar(value=str(self.cfg["kerf_mm"]))
+        self.kerf = tk.StringVar(value=str(prefs.get("kerf", self.cfg["kerf_mm"])))
         self.busy = False
         self._build_ui()
         self.refresh_bed()
@@ -114,7 +114,7 @@ class Station(tk.Tk):
             return {}
 
     def _save_prefs(self):
-        PREFS.write_text(json.dumps({"team": self.team.get()}), encoding="utf-8")
+        PREFS.write_text(json.dumps({"team": self.team.get(), "kerf": self.kerf.get()}), encoding="utf-8")
 
     def refresh_bed(self):
         jobs = ", ".join(f"{u['team']} {datetime.fromtimestamp(u['time']):%H:%M}" for u in self.bed.used[-3:])
@@ -149,6 +149,7 @@ class Station(tk.Tk):
         except ValueError:
             messagebox.showerror("Numbers", "Thickness and kerf must be numbers (mm).")
             return
+        self._save_prefs()
         j.build(thk, kerf, self.qty)
         for p in j.parts:
             self.qty.setdefault(p.name, p.qty)

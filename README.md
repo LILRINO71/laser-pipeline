@@ -13,6 +13,11 @@ Onshape: right-click Part Studio tab > Export > STEP      (or a face / drawing e
 
 There's no Onshape API, no keys and no internet. Everything runs on the laser PC.
 
+## Installing it
+
+`python tools/build_usb.py` makes `dist/usb/`: drag its two files onto a USB stick, then double-click
+`Install Laser Station.bat` on the laser PC. It carries its own Python and exact tested libraries. See `SCHOOL_SETUP.md`.
+
 ## Using it
 
 1. In Onshape, right-click the Part Studio tab that has your plates, then **Export…** → Format **STEP** → OK.
