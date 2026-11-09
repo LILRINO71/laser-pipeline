@@ -42,7 +42,8 @@ def main(argv=None):
     bed = Bed.load(*cfg["sheet_mm"])
     if a.setup:
         from laserpipe import vls_print
-        vls_print.setup_settings(vls_print.find_laser_printer(cfg.get("printer")))
+        ok = vls_print.setup_settings(vls_print.find_laser_printer(cfg.get("printer")))
+        print("Laser settings saved. Check them on the next job, before the laser starts." if ok else "Cancelled, nothing saved.")
         return
     if a.new_sheet:
         bed.new_sheet()

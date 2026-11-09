@@ -15,12 +15,13 @@ You now have a **Laser Station** icon on the desktop.
 
 Use the power and speed that you already know cut your wood cleanly. Laser Station won't fire until this is done.
 
-1. Double-click `C:\LaserStation\Save Laser Settings.bat`
-2. In the window that opens, go to the **Manual Control** tab.
-3. Click **Red** and enter your **cut through** power and speed. Press **Set**.
-4. Click **Blue** and enter your **engrave** power and speed. Press **Set**.
-5. Press **Save** and keep the `.LAS` file as a backup.
-6. Press **OK**.
+1. Open **Laser Station**. Next to **Laser driver** it should say **✓ Found**.
+   If it says **NOT FOUND**, pick the laser from that list. If the laser isn't in the list, UCP isn't installed yet.
+2. Click **Laser settings…** at the top right.
+3. In the window that opens, go to the **Manual Control** tab.
+4. Click **Red** and enter your **cut through** power and speed. Press **Set**.
+5. Click **Blue** and enter your **engrave** power and speed. Press **Set**.
+6. Press **OK**. That's what saves them. It should now say **Laser settings: saved**.
 
 Every job now uses these numbers. Nobody picks power or speed in Laser Station.
 If your wood or laser changes, do this again.
@@ -64,7 +65,8 @@ The next job will press **START** by itself. Check that it does. If it doesn't, 
 3. Click **Open STEP / DXF** and pick your file.
 4. Pick **Cut through** or **Engrave only**.
 5. Look at the parts list. Set anything you don't want to **0**.
-6. Click **FIRE**, then **Yes, FIRE**. Stay at the laser.
+6. Want it somewhere else? **Drag the part** on the map. **Right-click** it to turn it. A red outline means that spot is taken.
+7. Click **FIRE**, then **Yes, FIRE**. Stay at the laser.
 
 ## Rules for the laser room
 

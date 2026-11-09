@@ -14,6 +14,8 @@ from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
+from shapely.geometry import Point
+
 from laserpipe.bed import Bed
 from laserpipe.job import ROOT, Job, load_config
 
@@ -37,6 +39,9 @@ class Station(tk.Tk):
         self.thk = tk.StringVar(value=str(self.cfg["thickness_mm"]))
         self.kerf = tk.StringVar(value=str(prefs.get("kerf", self.cfg["kerf_mm"])))
         self.mode = tk.StringVar(value="cut")
+        self.printer = tk.StringVar()
+        self.xf = None  # sheet mm <-> canvas pixels, set by draw()
+        self.drag = None  # {"pl", "dx", "dy"} while a part is being dragged
         self.need_check = False
         self.busy = False
         self._build_ui()
@@ -68,8 +73,19 @@ class Station(tk.Tk):
         ttk.Radiobutton(modes, text="Cut through", variable=self.mode, value="cut", command=self.mode_changed).pack(side="left")
         ttk.Radiobutton(modes, text="Engrave only (can't cut through)", variable=self.mode, value="engrave",
                         command=self.mode_changed).pack(side="left", padx=12)
-        self.preset_lbl = ttk.Label(modes, text=self._preset_text(), foreground="#555")
-        self.preset_lbl.pack(side="right")
+
+        laser = ttk.Frame(self, padding=(12, 0, 12, 8))
+        laser.pack(fill="x")
+        ttk.Label(laser, text="Laser driver", style="H.TLabel").pack(side="left", padx=(0, 8))
+        self.printer_box = ttk.Combobox(laser, textvariable=self.printer, state="readonly", width=36)
+        self.printer_box.pack(side="left")
+        self.printer_box.bind("<<ComboboxSelected>>", self.pick_printer)
+        self.driver_lbl = ttk.Label(laser, text="", font=("Segoe UI", 10, "bold"))
+        self.driver_lbl.pack(side="left", padx=10)
+        ttk.Button(laser, text="Laser settings…", command=self.open_settings).pack(side="right")
+        self.preset_lbl = ttk.Label(laser, text="", font=("Segoe UI", 10, "bold"))
+        self.preset_lbl.pack(side="right", padx=10)
+        self.refresh_driver()
 
         body = ttk.PanedWindow(self, orient="horizontal")
         body.pack(fill="both", expand=True, padx=12)
@@ -107,6 +123,14 @@ class Station(tk.Tk):
         ttk.Button(hdr, text="◀", width=3, command=lambda: self.flip(-1)).pack(side="right")
         self.canvas = tk.Canvas(right, background="#f7f6f2", highlightthickness=0)
         self.canvas.pack(fill="both", expand=True, pady=4)
+        self.canvas.bind("<ButtonPress-1>", self.grab_part)
+        self.canvas.bind("<B1-Motion>", self.move_part)
+        self.canvas.bind("<ButtonRelease-1>", self.drop_part)
+        self.canvas.bind("<Button-3>", self.rotate_part)
+        hint = ttk.Frame(right)
+        hint.pack(fill="x")
+        ttk.Label(hint, text="Drag a part to choose where it cuts. Right-click a part to turn it.", foreground="#555").pack(side="left")
+        ttk.Button(hint, text="Auto-arrange", command=self.auto_arrange).pack(side="right")
 
         bot = ttk.Frame(self, padding=(12, 8))
         bot.pack(fill="x")
@@ -134,14 +158,69 @@ class Station(tk.Tk):
         except SystemExit as e:
             return str(e)
 
-    def _preset_text(self):
+    def refresh_driver(self):
         from laserpipe import vls_print
 
+        self.printer_box["values"] = [p for p, _ in vls_print.printer_list()]
         if self.cfg.get("test_pdf_dir"):
-            return "Test mode: nothing goes to the laser"
+            self.printer.set("Microsoft Print to PDF")
+            self.driver_lbl.config(text="Test mode: nothing goes to the laser", foreground="#555")
+            self.preset_lbl.config(text="", foreground="#555")
+            return
+        try:
+            self.printer.set(self._printer())
+            self.driver_lbl.config(text="✓ Found", foreground="#1b7a3d")
+        except SystemExit:
+            self.printer.set("")
+            self.driver_lbl.config(text="✗ NOT FOUND: pick the laser from this list", foreground=BAD)
+            self.preset_lbl.config(text="", foreground="#555")
+            return
         if self._preset_problem():
-            return "Laser settings: NOT SAVED, can't fire"
-        return "Laser settings: locked" + ("" if vls_print.preset_verified(self._printer()) else ", check them on the next job")
+            self.preset_lbl.config(text="Laser settings: NOT SAVED", foreground=BAD)
+        elif vls_print.preset_verified(self._printer()):
+            self.preset_lbl.config(text="Laser settings: locked ✓", foreground="#1b7a3d")
+        else:
+            self.preset_lbl.config(text="Laser settings: saved, check on next job", foreground="#8a5a00")
+
+    def pick_printer(self, _e=None):
+        name = self.printer.get()
+        self.cfg["printer"] = name
+        path = ROOT / "config.local.json"
+        try:
+            local = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            local = {}
+        local["printer"] = name
+        path.write_text(json.dumps(local, indent=1), encoding="utf-8")
+        self.refresh_driver()
+
+    def open_settings(self):
+        import win32gui
+
+        from laserpipe import vls_print
+
+        try:
+            printer = self._printer()
+        except SystemExit as e:
+            messagebox.showerror("Laser driver", f"Pick the laser from the Laser driver list first.\n\n{e}")
+            return
+        if vls_print.preset_problem(printer) is None and not messagebox.askyesno(
+                "Change the laser settings?", "These numbers are used for every team's job.\n\n"
+                "Only the person in charge of the laser should change them. Continue?"):
+            return
+        messagebox.showinfo("Laser settings", "In the next window, open the Manual Control tab.\n\n"
+                            "1.  Click Red. Enter your cut-through power and speed. Press Set.\n"
+                            "2.  Click Blue. Enter your engrave power and speed. Press Set.\n"
+                            "3.  Press OK.\n\nOK is what saves them here. You don't need the Save button.")
+        try:
+            ok = vls_print.setup_settings(printer, win32gui.GetAncestor(self.winfo_id(), 2))
+        except BaseException as e:
+            messagebox.showerror("Laser settings", f"The laser's settings window wouldn't open.\n\n{e}\n\nTake a photo of this and show it to Claude.")
+            return
+        self.refresh_driver()
+        if ok:
+            messagebox.showinfo("Saved", "Laser settings are saved and used for every job.\n\n"
+                                "The next job won't start by itself until you've checked them in UCP.")
 
     def mode_changed(self):
         engrave = self.mode.get() == "engrave"
@@ -258,6 +337,7 @@ class Station(tk.Tk):
         bw, bh = self.bed.w, self.bed.h
         k = min((W - 20) / bw, (H - 20) / bh)
         ox, oy = (W - bw * k) / 2, (H - bh * k) / 2
+        self.xf = (ox, oy, k, bh)
 
         def xy(pts):
             out = []
@@ -267,18 +347,21 @@ class Station(tk.Tk):
 
         sheet = self.job.sheets[self.view] if self.job and self.job.sheets else None
         c.create_rectangle(ox, oy, ox + bw * k, oy + bh * k, fill=WOOD, outline="#8b7a5a")
-        c.create_text(ox + 4, oy + 4, text="laser home (top-left)", anchor="nw", fill="#8b7a5a", font=("Segoe UI", 8))
+        c.create_text(ox + 4, oy + 4, text="top-left corner of the bed", anchor="nw", fill="#8b7a5a", font=("Segoe UI", 8))
         if sheet is None or not sheet.needs_new_wood:
             for u in self.bed.used_shapes():
                 for g in getattr(u, "geoms", [u]):
                     if hasattr(g, "exterior"):
                         c.create_polygon(xy(g.exterior.coords), fill=USED, outline="#777", stipple="gray50")
         if sheet:
-            cuts, marks = self.job.paths(sheet)
+            cuts, marks = self.job.paths(sheet, labels=self.drag is None)  # names are slow to redraw mid-drag
             for lp in marks:
                 c.create_line(xy(lp + lp[:1]), fill=MARK, width=1)
             for lp in cuts:
                 c.create_line(xy(lp + lp[:1]), fill=CUT, width=1.4)
+            if self.drag:
+                s = self.drag["pl"].shape()
+                c.create_line(xy(list(s.exterior.coords)), fill=BAD if self._collides(self.drag["pl"]) else "#1b7a3d", width=3)
             n = len(self.job.sheets)
             where = "NEEDS A NEW SHEET OF PLYWOOD" if sheet.needs_new_wood else "on the wood in the laser now"
             self.sheet_lbl.config(text=f"Sheet {self.view + 1} of {n} · {where}")
@@ -286,6 +369,80 @@ class Station(tk.Tk):
                 c.create_text(W / 2, 14, text="BLOCKED: " + self.job.errors[self.view][0], fill=BAD, font=("Segoe UI", 11, "bold"))
         else:
             self.sheet_lbl.config(text="Wood in the laser (grey = already cut)")
+
+    # ------------------------------------------------------------------ moving parts by hand
+    def _mm(self, e):
+        ox, oy, k, bh = self.xf
+        return (e.x - ox) / k, bh - (e.y - oy) / k
+
+    def _part_at(self, e):
+        if not (self.job and self.job.sheets and self.xf):
+            return None
+        pt = Point(self._mm(e))
+        hits = [pl for pl in self.job.sheets[self.view].placements if pl.shape().envelope.contains(pt)]
+        return min(hits, key=lambda pl: pl.shape().envelope.area) if hits else None
+
+    def _collides(self, pl):
+        sheet = self.job.sheets[self.view]
+        gap = self.cfg["gap_mm"] * 0.45
+        s = pl.shape()
+        used = [] if sheet.needs_new_wood else self.bed.used_shapes()
+        others = [o.shape() for o in sheet.placements if o is not pl]
+        return any(s.distance(o) < gap for o in used + others)
+
+    def _keep_on_sheet(self, pl):
+        m = self.cfg["margin_mm"]
+        x0, y0, x1, y1 = pl.shape().bounds
+        w, h = x1 - x0, y1 - y0
+        pl.x += max(m, min(self.bed.w - m - w, x0)) - x0
+        pl.y += max(m, min(self.bed.h - m - h, y0)) - y0
+
+    def grab_part(self, e):
+        pl = self._part_at(e)
+        if pl:
+            x, y = self._mm(e)
+            self.drag = {"pl": pl, "dx": pl.x - x, "dy": pl.y - y}
+            self.draw()
+
+    def move_part(self, e):
+        if not self.drag:
+            return
+        x, y = self._mm(e)
+        pl = self.drag["pl"]
+        pl.x, pl.y = x + self.drag["dx"], y + self.drag["dy"]
+        self._keep_on_sheet(pl)
+        x0, _, _, y1 = pl.shape().bounds
+        self.status.config(text=f"{pl.part.name}: {x0:.0f} mm from the left, {self.bed.h - y1:.0f} mm from the top")
+        self.draw()
+
+    def drop_part(self, _e=None):
+        if self.drag:
+            pl = self.drag["pl"]
+            self.drag = None
+            self._placed(pl)
+
+    def rotate_part(self, e):
+        pl = self._part_at(e)
+        if not pl:
+            return
+        x0, y0, x1, y1 = pl.shape().bounds
+        pl.rotated = not pl.rotated
+        a0, b0, a1, b1 = pl.shape().bounds
+        pl.x += (x0 + x1 - a0 - a1) / 2
+        pl.y += (y0 + y1 - b0 - b1) / 2
+        self._keep_on_sheet(pl)
+        self._placed(pl)
+
+    def _placed(self, pl):
+        self.job.remember_move(self.view, pl)
+        self.job.check(self.bed)
+        self.fill_msgs()
+        self.draw()
+
+    def auto_arrange(self):
+        if self.job:
+            self.job.moves.clear()
+            self.rebuild()
 
     # ------------------------------------------------------------------ actions
     def new_sheet(self):
@@ -310,7 +467,7 @@ class Station(tk.Tk):
 
     def fire(self):
         j = self.job
-        if self.busy or not j or not j.sheets:
+        if self.busy or not j or not j.sheets or not j.sheets[self.view].placements:
             return
         i = self.view
         s = j.sheets[i]
@@ -319,7 +476,8 @@ class Station(tk.Tk):
             return
         problem = self._preset_problem()
         if problem:
-            messagebox.showerror("Can't fire yet", problem)
+            if messagebox.askyesno("Can't fire yet", f"{problem}\n\nOpen the laser settings now?"):
+                self.open_settings()
             return
         dup = j.duplicate_of()
         if dup and not messagebox.askyesno("Already cut?", f"These exact parts were sent by {dup}.\nCut them again?"):
@@ -420,7 +578,7 @@ class Station(tk.Tk):
                                "The laser has NOT started.\n\nIn UCP, select this job and click Settings.\n\n"
                                "Do Red and Blue show the power and speed you saved?"):
             vls_print.mark_verified(self._printer())
-            self.preset_lbl.config(text=self._preset_text())
+            self.refresh_driver()
             messagebox.showinfo("Locked in", "Good. Press the green START in UCP for this job.\n\nFrom now on Start is pressed for you.")
         else:
             messagebox.showwarning("Don't start this job", "Do NOT press START.\n\nDelete this job in UCP and click Undo last cut.\n\n"

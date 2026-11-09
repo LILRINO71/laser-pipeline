@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 from pathlib import Path
 
 import pywintypes
@@ -22,19 +23,28 @@ DM_FIELDS = ["Orientation", "PaperSize", "PaperLength", "PaperWidth", "Scale", "
              "Color", "Duplex", "YResolution", "Fields"]
 
 
+LASER_NAME = re.compile(r"\bvls|\buls|versalaser|universal\s*laser", re.I)  # never just "laser": that matches HP LaserJets
+
+
+def printer_list() -> list[tuple[str, str]]:
+    """[(printer name, driver name), ...]"""
+    found = win32print.EnumPrinters(win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS, None, 2)
+    return [(p["pPrinterName"], p["pDriverName"]) for p in found]
+
+
 def find_laser_printer(name: str | None = None) -> str:
-    printers = [p[2] for p in win32print.EnumPrinters(win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS)]
+    printers = printer_list()
+    names = [p for p, _ in printers]
     if name:
-        hits = [p for p in printers if name.lower() in p.lower()]
+        hits = [p for p in names if p.lower() == name.lower()] or [p for p in names if name.lower() in p.lower()]
         if not hits:
-            raise SystemExit(f"No printer matching '{name}'. Installed: {', '.join(printers)}")
+            raise SystemExit(f"No printer matching '{name}'. Installed: {', '.join(names)}")
         return hits[0]
-    for key in ("vls", "uls", "universal", "laser"):
-        for p in printers:
-            if key in p.lower():
-                return p
-    raise SystemExit("Couldn't find the laser's printer driver (looked for VLS/ULS/Universal). "
-                     f"Installed printers: {', '.join(printers)}. Pass --printer \"<name>\".")
+    for p, driver in printers:
+        if LASER_NAME.search(p) or LASER_NAME.search(driver):
+            return p
+    raise SystemExit("Couldn't find the laser's printer driver (looked for VLS/ULS/Universal Laser). "
+                     f"Installed printers: {', '.join(names)}. Pick it in Laser Station's Laser driver list.")
 
 
 def _saved(printer: str) -> dict:
@@ -49,14 +59,14 @@ def preset_problem(printer: str) -> str | None:
     """Why the saved power/speed settings can't be used, or None if they can."""
     saved = _saved(printer)
     if not saved:
-        return "The laser settings haven't been saved yet.\n\nSomeone in charge of the laser needs to double-click Save Laser Settings once."
+        return "The laser settings haven't been saved yet."
     h = win32print.OpenPrinter(printer)
     try:
         extra = win32print.GetPrinter(h, 2)["pDevMode"].DriverExtra
     finally:
         win32print.ClosePrinter(h)
     if saved.get("driver_data") and extra != len(base64.b64decode(saved["driver_data"])):
-        return "The laser's driver changed since the settings were saved.\n\nDouble-click Save Laser Settings and save them again."
+        return "The laser's driver changed since the settings were saved, so they need saving again."
     return None
 
 
@@ -94,17 +104,16 @@ def _devmode(printer: str, require: bool = False):
         raise
 
 
-def setup_settings(printer: str) -> None:
-    """Open the driver's own settings dialog and lock in what's chosen. Every job uses this copy."""
+def setup_settings(printer: str, hwnd: int | None = None) -> bool:
+    """Open the driver's own settings dialog and lock in what's chosen. True if OK was pressed."""
     h, dm = _devmode(printer)
     try:
-        hwnd = win32gui.GetDesktopWindow()
+        hwnd = hwnd or win32gui.GetDesktopWindow()
         r = win32print.DocumentProperties(hwnd, h, printer, dm, dm, win32con.DM_IN_PROMPT | win32con.DM_IN_BUFFER | win32con.DM_OUT_BUFFER)
         if r != win32con.IDOK:
-            print("Cancelled, nothing saved.")
-            return
+            return False
         _save_settings(printer, dm)
-        print("Laser settings saved. Check them on the next job, before the laser starts.")
+        return True
     finally:
         win32print.ClosePrinter(h)
 

@@ -36,6 +36,7 @@ class Job:
         self.sheets: list = []
         self.too_big: list = []
         self.errors: dict[int, list[str]] = {}
+        self.moves: dict[tuple, tuple] = {}  # (part name, copy) -> (sheet index, x, y, rotated), from dragging on the map
         self.name = f"{datetime.now():%Y%m%d-%H%M%S}"
 
     # ------------------------------------------------------------ input
@@ -77,6 +78,31 @@ class Job:
         self.sheets, self.too_big = nest.nest(self.parts, bed.w, bed.h, c["margin_mm"], c["gap_mm"], occupied=used)
         if self.sheets and not used:
             self.sheets[0].needs_new_wood = False  # empty map = the sheet in the laser is fresh
+        self._apply_moves()
+        return self.check(bed)
+
+    def _apply_moves(self):
+        for key, (idx, x, y, rot) in self.moves.items():
+            if idx >= len(self.sheets):
+                continue
+            for s in self.sheets:
+                for pl in s.placements:
+                    if (pl.part.name, pl.copy) == key:
+                        s.placements.remove(pl)
+                        pl.x, pl.y, pl.rotated = x, y, rot
+                        self.sheets[idx].placements.append(pl)
+                        break
+                else:
+                    continue
+                break
+
+    def remember_move(self, sheet_index: int, pl) -> None:
+        self.moves[(pl.part.name, pl.copy)] = (sheet_index, pl.x, pl.y, pl.rotated)
+
+    def check(self, bed: Bed):
+        """Run the hard safety checks on the layout as it stands now."""
+        c = self.cfg
+        used = bed.used_shapes()
         self.errors = {}
         for i, s in enumerate(self.sheets):
             errs = check_sheet(s, [] if s.needs_new_wood else used, c["margin_mm"], c["gap_mm"])
@@ -84,8 +110,8 @@ class Job:
                 self.errors[i] = errs
         return self.sheets
 
-    def paths(self, sheet):
-        cuts, marks = output.sheet_paths(sheet, labels=self.cfg["labels"] and self.mode == "cut")
+    def paths(self, sheet, labels=True):
+        cuts, marks = output.sheet_paths(sheet, labels=labels and self.cfg["labels"] and self.mode == "cut")
         if self.mode == "engrave":
             return [], cuts  # every line goes out blue, so no cut-power line exists in the job
         return cuts, marks
