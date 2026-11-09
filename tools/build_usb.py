@@ -18,7 +18,7 @@ DIST = ROOT / "dist"
 APP = DIST / "LaserStation"
 USB = DIST / "usb"
 SKIP_PY = {"Doc", "include", "libs", "Scripts", "__pycache__", "site-packages", "test", "idlelib"}
-APP_FILES = ["laser.py", "station.pyw", "config.json", "README.md", "SCHOOL_SETUP.md", "requirements.txt", "Laser Station.bat"]
+APP_FILES = ["laser.py", "station.pyw", "config.json", "README.md", "SCHOOL_SETUP.md", "requirements.txt", "Laser Station.bat", "Save Laser Settings.bat"]
 
 
 def main():

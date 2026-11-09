@@ -36,6 +36,8 @@ class Station(tk.Tk):
         self.team = tk.StringVar(value=prefs.get("team", ""))
         self.thk = tk.StringVar(value=str(self.cfg["thickness_mm"]))
         self.kerf = tk.StringVar(value=str(prefs.get("kerf", self.cfg["kerf_mm"])))
+        self.mode = tk.StringVar(value="cut")
+        self.need_check = False
         self.busy = False
         self._build_ui()
         self.refresh_bed()
@@ -54,10 +56,20 @@ class Station(tk.Tk):
         ttk.Label(top, text="Thickness mm").pack(side="left", padx=(16, 4))
         ttk.Entry(top, textvariable=self.thk, width=5).pack(side="left")
         ttk.Label(top, text="Kerf mm").pack(side="left", padx=(12, 4))
-        ttk.Entry(top, textvariable=self.kerf, width=5).pack(side="left")
+        self.kerf_entry = ttk.Entry(top, textvariable=self.kerf, width=5)
+        self.kerf_entry.pack(side="left")
         ttk.Button(top, text="Re-layout", command=self.rebuild).pack(side="left", padx=10)
         self.bed_lbl = ttk.Label(top, text="", foreground="#555")
         self.bed_lbl.pack(side="right")
+
+        modes = ttk.Frame(self, padding=(12, 0, 12, 8))
+        modes.pack(fill="x")
+        ttk.Label(modes, text="What should the laser do?", style="H.TLabel").pack(side="left", padx=(0, 12))
+        ttk.Radiobutton(modes, text="Cut through", variable=self.mode, value="cut", command=self.mode_changed).pack(side="left")
+        ttk.Radiobutton(modes, text="Engrave only (can't cut through)", variable=self.mode, value="engrave",
+                        command=self.mode_changed).pack(side="left", padx=12)
+        self.preset_lbl = ttk.Label(modes, text=self._preset_text(), foreground="#555")
+        self.preset_lbl.pack(side="right")
 
         body = ttk.PanedWindow(self, orient="horizontal")
         body.pack(fill="both", expand=True, padx=12)
@@ -107,6 +119,36 @@ class Station(tk.Tk):
         self.status.pack(side="right", padx=14)
 
     # ------------------------------------------------------------------ state
+    def _printer(self):
+        from laserpipe import vls_print
+
+        return vls_print.find_laser_printer("Microsoft Print to PDF" if self.cfg.get("test_pdf_dir") else self.cfg.get("printer"))
+
+    def _preset_problem(self):
+        from laserpipe import vls_print
+
+        if self.cfg.get("test_pdf_dir"):
+            return None
+        try:
+            return vls_print.preset_problem(self._printer())
+        except SystemExit as e:
+            return str(e)
+
+    def _preset_text(self):
+        from laserpipe import vls_print
+
+        if self.cfg.get("test_pdf_dir"):
+            return "Test mode: nothing goes to the laser"
+        if self._preset_problem():
+            return "Laser settings: NOT SAVED, can't fire"
+        return "Laser settings: locked" + ("" if vls_print.preset_verified(self._printer()) else ", check them on the next job")
+
+    def mode_changed(self):
+        engrave = self.mode.get() == "engrave"
+        self.fire_btn.config(text="ENGRAVE  ▸  FIRE" if engrave else "CUT  ▸  FIRE")
+        self.kerf_entry.state(["disabled" if engrave else "!disabled"])
+        self.rebuild()
+
     def _prefs(self):
         try:
             return json.loads(PREFS.read_text(encoding="utf-8"))
@@ -142,6 +184,7 @@ class Station(tk.Tk):
             return
         j = self.job
         j.team = self.team.get().strip() or "unknown team"
+        j.mode = self.mode.get()
         j.notes = [n for n in j.notes if not n.startswith("skipped ")]
         try:
             thk = float(self.thk.get() or 0)
@@ -274,6 +317,10 @@ class Station(tk.Tk):
         if j.errors.get(i):
             messagebox.showerror("Blocked", "This sheet failed a safety check:\n\n" + "\n".join(j.errors[i]))
             return
+        problem = self._preset_problem()
+        if problem:
+            messagebox.showerror("Can't fire yet", problem)
+            return
         dup = j.duplicate_of()
         if dup and not messagebox.askyesno("Already cut?", f"These exact parts were sent by {dup}.\nCut them again?"):
             return
@@ -294,8 +341,11 @@ class Station(tk.Tk):
         d.resizable(False, False)
         wood = ("Swap in a NEW sheet of plywood first (the map will reset)." if s.needs_new_wood
                 else "The plywood in the laser is the sheet on screen (grey = already cut), pushed into the top-left corner.")
-        txt = (f"Fire the laser for {len(s.placements)} part(s) on sheet {i + 1}?\n\n"
+        what = ("ENGRAVE ONLY: nothing will be cut through." if self.job.mode == "engrave"
+                else "CUT THROUGH: the red lines go all the way through the wood.")
+        txt = (f"{what}\n\nFire the laser for {len(s.placements)} part(s) on sheet {i + 1}?\n\n"
                f"•  {wood}\n•  Focus is set for this wood.\n•  Lid closed, exhaust / air assist on.\n"
+               "•  Old scrap is cleared out and the fire extinguisher is within reach.\n"
                "•  You'll stay at the laser until it finishes.")
         ttk.Label(d, text=txt, padding=18, wraplength=440, justify="left", font=("Segoe UI", 10)).pack()
         ans = {"ok": False}
@@ -325,7 +375,10 @@ class Station(tk.Tk):
             j.send(i, printer, Path(test_pdf) if test_pdf else None)
             j.record(self.bed, i)
             msg = f"Sheet {i + 1} sent to {printer}."
-            if self.cfg.get("auto_start") and not test_pdf:
+            self.need_check = not test_pdf and not vls_print.preset_verified(printer)
+            if self.need_check:
+                msg += " It has NOT started."
+            elif self.cfg.get("auto_start") and not test_pdf:
                 ok, m = ucp.press_start(self.cfg.get("ucp_start_button"))
                 msg += " " + m
             self.after(0, self._sent, i, msg, None)
@@ -340,6 +393,8 @@ class Station(tk.Tk):
             messagebox.showerror("Laser", err)
             return
         self.status.config(text=msg)
+        if self.need_check:
+            self.check_preset()
         j = self.job
         left = [k for k in range(len(j.sheets)) if k > i]
         if left:
@@ -352,7 +407,24 @@ class Station(tk.Tk):
             messagebox.showinfo("Sent", msg + "\n\nThe used wood is marked on the map for the next team.")
             self.job = None
             self.tree.delete(*self.tree.get_children())
+            self.mode.set("cut")
+            self.fire_btn.config(text="CUT  ▸  FIRE")
+            self.kerf_entry.state(["!disabled"])
             self.refresh_bed()
+
+    def check_preset(self):
+        """First job after saving: prove the numbers reached UCP before the laser may start itself."""
+        from laserpipe import vls_print
+
+        if messagebox.askyesno("Check the laser settings",
+                               "The laser has NOT started.\n\nIn UCP, select this job and click Settings.\n\n"
+                               "Do Red and Blue show the power and speed you saved?"):
+            vls_print.mark_verified(self._printer())
+            self.preset_lbl.config(text=self._preset_text())
+            messagebox.showinfo("Locked in", "Good. Press the green START in UCP for this job.\n\nFrom now on Start is pressed for you.")
+        else:
+            messagebox.showwarning("Don't start this job", "Do NOT press START.\n\nDelete this job in UCP and click Undo last cut.\n\n"
+                                   "Then tell Claude: \"presets don't stick\". Until that's fixed, the laser will never start by itself.")
 
 
 if __name__ == "__main__":

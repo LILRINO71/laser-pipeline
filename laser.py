@@ -30,6 +30,7 @@ def main(argv=None):
     ap.add_argument("--qty", action="append", default=[], help='"Part name=count" (repeatable), "*=2" for everything')
     ap.add_argument("--thickness", type=float, default=cfg["thickness_mm"], help="only plates this thick (mm); 0 = any")
     ap.add_argument("--kerf", type=float, default=cfg["kerf_mm"], help="beam width to compensate, mm")
+    ap.add_argument("--engrave", action="store_true", help="engrave only: every line goes out blue, nothing is cut through")
     ap.add_argument("--dxf-units", choices=["mm", "in"], help="force DXF units if the file has none")
     ap.add_argument("--no-send", action="store_true", help="files + preview only")
     ap.add_argument("--no-open", action="store_true", help="don't open the preview page")
@@ -56,6 +57,7 @@ def main(argv=None):
         name, _, n = q.rpartition("=")
         qty[name.strip()] = int(n)
     job = Job(cfg, a.team)
+    job.mode = "engrave" if a.engrave else "cut"
     job.add_files(a.files, a.dxf_units)
     job.build(a.thickness, a.kerf, qty)
     if not job.parts:
@@ -92,8 +94,9 @@ def main(argv=None):
             print(f"Sheet {i + 1} is blocked, not sending.")
             continue
         wood = "a NEW sheet of plywood is loaded" if s.needs_new_wood else "the wood in the laser matches the map (grey = used)"
-        q = (f"\nFire sheet {i + 1} ({len(s.placements)} parts)? Check: {wood}, focus set, lid closed, exhaust on, "
-             "and you'll stay at the laser. [y/N] ")
+        what = "ENGRAVE ONLY" if a.engrave else "CUT THROUGH"
+        q = (f"\n{what}: fire sheet {i + 1} ({len(s.placements)} parts)? Check: {wood}, focus set, lid closed, exhaust on, "
+             "scrap cleared, extinguisher in reach, and you'll stay at the laser. [y/N] ")
         if _ask(q) not in ("y", "yes"):
             print("Not fired. Nothing marked as used.")
             return
@@ -102,7 +105,9 @@ def main(argv=None):
         job.send(i, printer, Path(test_pdf) if test_pdf else None)
         job.record(bed, i)
         msg = f"Sheet {i + 1} sent to {printer}."
-        if cfg.get("auto_start") and not test_pdf:
+        if not test_pdf and not vls_print.preset_verified(printer):
+            msg += " In UCP click Settings and check Red and Blue, then press START yourself."
+        elif cfg.get("auto_start") and not test_pdf:
             msg += " " + ucp.press_start(cfg.get("ucp_start_button"))[1]
         print(msg)
 

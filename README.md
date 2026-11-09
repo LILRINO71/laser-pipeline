@@ -30,9 +30,11 @@ To rebuild the installer: `python tools/build_usb.py` (makes `dist/usb/`).
 2. On the laser PC, double-click **Laser Station.bat**, type your team name, then click **Open STEP / DXF…**
 3. Check the layout. **Grey** = wood other teams already cut. **Red** = your cuts. **Blue** = part names.
    Double-click a part to change how many you need.
-4. Click **CUT ▸ FIRE**. Answer the one question (wood matches the map, focus set, lid closed, exhaust on,
-   you'll stay). The job goes to the laser and UCP's Start is pressed for you.
-5. When someone puts a fresh sheet in, click **New sheet loaded**. If a cut never happened (cancelled in
+4. Pick **Cut through** or **Engrave only**. Power and speed come from the settings saved once with
+   `Save Laser Settings.bat`, so nobody picks them per job.
+5. Click **FIRE**. Answer the one question (wood matches the map, focus set, lid closed, exhaust on,
+   scrap cleared, extinguisher in reach, you'll stay). The job goes to the laser and UCP's Start is pressed for you.
+6. When someone puts a fresh sheet in, click **New sheet loaded**. If a cut never happened (cancelled in
    UCP, power cut), click **Undo last cut** so that wood isn't counted as used.
 
 If a job doesn't fit in the free wood, the extra parts go on "Sheet 2 · NEEDS A NEW SHEET". After sheet 1
@@ -51,6 +53,9 @@ finishes, swap the wood and press FIRE again.
 | Part bigger than the bed | left out, listed in red |
 | DXF with no units | warning, assumes mm |
 | Laser fires | only after the "Ready to fire?" question is answered Yes |
+| Laser settings never saved, or the driver changed | **blocked**, won't send |
+| First job after saving settings | not started until someone confirms UCP shows the saved numbers |
+| Engrave only | every line is sent blue, so the job contains no cut-power line |
 
 ## Command line (same engine)
 
@@ -58,7 +63,8 @@ finishes, swap the wood and press FIRE again.
 python laser.py plates.step --team 7831 --qty "Frame Plate +Y=2"
 python laser.py plate.dxf --dxf-units in --no-send
 python laser.py --new-sheet
-python laser.py --setup            (open the ULS driver's own settings once and save them)
+python laser.py plate.dxf --engrave
+python laser.py --setup            (open the ULS driver's own settings and lock them in)
 ```
 
 ## Settings: `config.json` (put per-PC changes in `config.local.json`)

@@ -37,12 +37,53 @@ def find_laser_printer(name: str | None = None) -> str:
                      f"Installed printers: {', '.join(printers)}. Pass --printer \"<name>\".")
 
 
-def _devmode(printer: str):
+def _saved(printer: str) -> dict:
+    try:
+        saved = json.loads(SETTINGS_FILE.read_text())
+    except (OSError, ValueError):
+        return {}
+    return saved if saved.get("printer") == printer else {}
+
+
+def preset_problem(printer: str) -> str | None:
+    """Why the saved power/speed settings can't be used, or None if they can."""
+    saved = _saved(printer)
+    if not saved:
+        return "The laser settings haven't been saved yet.\n\nSomeone in charge of the laser needs to double-click Save Laser Settings once."
+    h = win32print.OpenPrinter(printer)
+    try:
+        extra = win32print.GetPrinter(h, 2)["pDevMode"].DriverExtra
+    finally:
+        win32print.ClosePrinter(h)
+    if saved.get("driver_data") and extra != len(base64.b64decode(saved["driver_data"])):
+        return "The laser's driver changed since the settings were saved.\n\nDouble-click Save Laser Settings and save them again."
+    return None
+
+
+def preset_verified(printer: str) -> bool:
+    return bool(_saved(printer).get("verified"))
+
+
+def mark_verified(printer: str) -> None:
+    saved = _saved(printer)
+    saved["verified"] = True
+    SETTINGS_FILE.write_text(json.dumps(saved, indent=1))
+
+
+def _save_settings(printer: str, dm) -> None:
+    data = {"printer": printer, "verified": False, "fields": {k: getattr(dm, k) for k in DM_FIELDS},
+            "driver_data": base64.b64encode(bytes(dm.DriverData or b"")).decode()}
+    SETTINGS_FILE.write_text(json.dumps(data, indent=1))
+
+
+def _devmode(printer: str, require: bool = False):
+    if require and (problem := preset_problem(printer)):
+        raise SystemExit(problem)
     h = win32print.OpenPrinter(printer)
     try:
         dm = win32print.GetPrinter(h, 2)["pDevMode"]
-        saved = json.loads(SETTINGS_FILE.read_text()) if SETTINGS_FILE.is_file() else {}
-        if saved.get("printer") == printer:
+        saved = _saved(printer)
+        if saved:
             for k, v in saved["fields"].items():
                 setattr(dm, k, v)
             if saved.get("driver_data") and dm.DriverExtra == len(base64.b64decode(saved["driver_data"])):
@@ -54,7 +95,7 @@ def _devmode(printer: str):
 
 
 def setup_settings(printer: str) -> None:
-    """Open the driver's own settings dialog once (pick 6 mm plywood etc.) and remember the result."""
+    """Open the driver's own settings dialog and lock in what's chosen. Every job uses this copy."""
     h, dm = _devmode(printer)
     try:
         hwnd = win32gui.GetDesktopWindow()
@@ -62,17 +103,15 @@ def setup_settings(printer: str) -> None:
         if r != win32con.IDOK:
             print("Cancelled, nothing saved.")
             return
-        data = {"printer": printer, "fields": {k: getattr(dm, k) for k in DM_FIELDS},
-                "driver_data": base64.b64encode(bytes(dm.DriverData or b"")).decode()}
-        SETTINGS_FILE.write_text(json.dumps(data, indent=1))
-        print(f"Saved laser settings to {SETTINGS_FILE.name}")
+        _save_settings(printer, dm)
+        print("Laser settings saved. Check them on the next job, before the laser starts.")
     finally:
         win32print.ClosePrinter(h)
 
 
 def print_sheet(printer: str, job_name: str, sheet_w: float, sheet_h: float, layers: list, output_file: str | None = None) -> None:
     """layers: [(rgb_tuple, [loop, ...]), ...] in drawing order. mm, origin bottom-left of the sheet."""
-    h, dm = _devmode(printer)
+    h, dm = _devmode(printer, require=output_file is None)  # a real laser job never runs on unsaved settings
     try:
         dm.PaperSize = 256  # DMPAPER_USER: custom size = the sheet
         dm.PaperWidth = int(round(sheet_w * 10))  # tenths of a mm

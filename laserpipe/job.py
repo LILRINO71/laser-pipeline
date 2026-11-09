@@ -28,6 +28,7 @@ class Job:
     def __init__(self, cfg: dict, team: str = ""):
         self.cfg = cfg
         self.team = team.strip() or "unknown team"
+        self.mode = "cut"  # "cut" or "engrave"
         self.files: list[Path] = []
         self.raws: list = []
         self.notes: list[str] = []  # info + warnings for the operator
@@ -50,6 +51,8 @@ class Job:
     def build(self, thickness: float | None, kerf: float, qty: dict | None = None):
         qty = {k.lower(): v for k, v in (qty or {}).items()}
         tol = self.cfg["thickness_tol_mm"]
+        if self.mode == "engrave":
+            kerf = 0  # nothing is cut away, so the lines stay exactly where they were drawn
         self.parts = []
         for r in self.raws:
             if thickness and r.get("thk") is not None and abs(r["thk"] - thickness) > tol:
@@ -82,7 +85,10 @@ class Job:
         return self.sheets
 
     def paths(self, sheet):
-        return output.sheet_paths(sheet, labels=self.cfg["labels"])
+        cuts, marks = output.sheet_paths(sheet, labels=self.cfg["labels"] and self.mode == "cut")
+        if self.mode == "engrave":
+            return [], cuts  # every line goes out blue, so no cut-power line exists in the job
+        return cuts, marks
 
     def duplicate_of(self) -> str | None:
         """Same files + quantities sent in the last 30 min? Returns that job's description."""
@@ -96,7 +102,7 @@ class Job:
         m = hashlib.sha1()
         for f in sorted(self.files):
             m.update(f.read_bytes())
-        m.update(json.dumps(sorted((p.name, p.qty) for p in self.parts)).encode())
+        m.update(json.dumps([self.mode] + sorted((p.name, p.qty) for p in self.parts)).encode())
         return m.hexdigest()
 
     # ------------------------------------------------------------ output
@@ -114,7 +120,7 @@ class Job:
             stats.append({"parts": len(s.placements), "cut_m": output.cut_length(cuts) / 1000,
                           "fill": sum(p.shape().envelope.area for p in s.placements) / (s.w * s.h) * 100,
                           "new_wood": s.needs_new_wood, "errors": self.errors.get(i - 1, [])})
-        settings = {"team": self.team, "sheet": f"{bed.w:.0f} × {bed.h:.0f} mm", "files": ", ".join(f.name for f in self.files)}
+        settings = {"team": self.team, "job": "engrave only" if self.mode == "engrave" else "cut through", "sheet": f"{bed.w:.0f} × {bed.h:.0f} mm", "files": ", ".join(f.name for f in self.files)}
         (out / "preview.html").write_text(output.preview_html(self.name, "", svgs, self.parts, self.too_big, stats, settings, self.notes),
                                           encoding="utf-8")
         return out
@@ -137,7 +143,7 @@ class Job:
         """Mark sheet i's parts as cut on the bed map and in the job history."""
         bed.mark_cut(self.team, self.name, [pl.shape() for pl in self.sheets[i].placements])
         hist = _history()
-        hist.append({"time": time.time(), "team": self.team, "job": self.name, "sheet": i + 1, "hash": self.fingerprint(),
+        hist.append({"time": time.time(), "team": self.team, "job": self.name, "mode": self.mode, "sheet": i + 1, "hash": self.fingerprint(),
                      "parts": [pl.part.name for pl in self.sheets[i].placements]})
         HISTORY.parent.mkdir(parents=True, exist_ok=True)
         HISTORY.write_text(json.dumps(hist[-500:], indent=1), encoding="utf-8")
