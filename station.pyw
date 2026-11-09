@@ -21,6 +21,7 @@ from laserpipe.job import ROOT, Job, load_config
 
 PREFS = ROOT / "station_prefs.json"
 WOOD, USED, CUT, MARK, BAD = "#ecd9b4", "#9a9a9a", "#d01c1c", "#1f4fd8", "#b3261e"
+BG, CARD, INK, MUTED, LINE, HEAD, GREEN, FIRE, BTN = "#f3f1ec", "#ffffff", "#1f2328", "#6b7078", "#dcd8cf", "#1f2328", "#1b7a3d", "#c8321f", "#e9e5dc"
 
 
 class Station(tk.Tk):
@@ -28,8 +29,8 @@ class Station(tk.Tk):
         super().__init__()
         self.cfg = load_config()
         self.title("Laser Station · VLS 4.60")
-        self.geometry("1180x760")
-        self.minsize(900, 600)
+        self.geometry("1280x820")
+        self.minsize(1040, 660)
         self.bed = Bed.load(*self.cfg["sheet_mm"])
         self.job: Job | None = None
         self.qty: dict[str, int] = {}
@@ -56,101 +57,156 @@ class Station(tk.Tk):
 
     # ------------------------------------------------------------------ UI
     def _build_ui(self):
+        self.configure(background=BG)
         st = ttk.Style(self)
-        st.configure("Fire.TButton", font=("Segoe UI", 13, "bold"), foreground=BAD, padding=10)
-        st.configure("H.TLabel", font=("Segoe UI", 11, "bold"))
-        top = ttk.Frame(self, padding=(12, 10))
-        top.pack(fill="x")
-        ttk.Label(top, text="Team").pack(side="left")
-        ttk.Entry(top, textvariable=self.team, width=16).pack(side="left", padx=(4, 14))
-        ttk.Button(top, text="Open STEP / DXF…", command=self.open_files).pack(side="left")
-        ttk.Label(top, text="Thickness mm").pack(side="left", padx=(16, 4))
-        ttk.Entry(top, textvariable=self.thk, width=5).pack(side="left")
-        ttk.Label(top, text="Kerf mm").pack(side="left", padx=(12, 4))
-        self.kerf_entry = ttk.Entry(top, textvariable=self.kerf, width=5)
-        self.kerf_entry.pack(side="left")
-        ttk.Button(top, text="Re-layout", command=self.rebuild).pack(side="left", padx=10)
-        self.bed_lbl = ttk.Label(top, text="", foreground="#555")
-        self.bed_lbl.pack(side="right")
+        st.theme_use("clam")
+        st.configure(".", background=BG, foreground=INK, font=("Segoe UI", 10), bordercolor=LINE, lightcolor=CARD, darkcolor=CARD,
+                     troughcolor=BG, focuscolor=BG)
+        st.configure("Card.TFrame", background=CARD, relief="solid", borderwidth=1, bordercolor=LINE)
+        st.configure("Inner.TFrame", background=CARD)
+        st.configure("Card.TLabel", background=CARD)
+        st.configure("Small.TLabel", background=CARD, foreground=MUTED, font=("Segoe UI", 9))
+        st.configure("H.TLabel", background=CARD, font=("Segoe UI Semibold", 12))
+        st.configure("Bar.TLabel", background=BG, foreground=MUTED)
+        st.configure("Warn.TLabel", background=CARD, foreground=BAD, font=("Segoe UI", 9))
+        st.configure("Status.TLabel", background=CARD, foreground=INK, font=("Segoe UI Semibold", 10))
+        st.configure("TEntry", fieldbackground=CARD, padding=5)
+        st.map("TEntry", fieldbackground=[("disabled", BG)], foreground=[("disabled", MUTED)])
+        st.configure("TCombobox", fieldbackground=CARD, background=CARD, padding=4, arrowsize=14)
+        st.map("TCombobox", fieldbackground=[("readonly", CARD)], selectbackground=[("readonly", CARD)], selectforeground=[("readonly", INK)])
+        self.option_add("*TCombobox*Listbox.font", ("Segoe UI", 10))
+        st.configure("Treeview", background=CARD, fieldbackground=CARD, rowheight=30, borderwidth=0)
+        st.map("Treeview", background=[("selected", "#e7e2d6")], foreground=[("selected", INK)])
+        st.configure("Treeview.Heading", background=CARD, foreground=MUTED, relief="flat", font=("Segoe UI", 9), padding=(4, 5))
+        st.map("Treeview.Heading", background=[("active", CARD)])
+        st.configure("TPanedwindow", background=BG)
 
-        modes = ttk.Frame(self, padding=(12, 0, 12, 8))
-        modes.pack(fill="x")
-        ttk.Label(modes, text="What should the laser do?", style="H.TLabel").pack(side="left", padx=(0, 12))
-        ttk.Radiobutton(modes, text="Cut through", variable=self.mode, value="cut", command=self.mode_changed).pack(side="left")
-        ttk.Radiobutton(modes, text="Engrave only (can't cut through)", variable=self.mode, value="engrave",
-                        command=self.mode_changed).pack(side="left", padx=12)
+        def button(name, bg, fg, hover, **kw):
+            st.configure(name, background=bg, foreground=fg, bordercolor=bg, lightcolor=bg, darkcolor=bg, relief="flat", focuscolor=bg, **kw)
+            st.map(name, background=[("disabled", "#dcd9d2"), ("pressed", hover), ("active", hover)], foreground=[("disabled", "#8d8d86")],
+                   bordercolor=[("disabled", "#dcd9d2")], lightcolor=[("disabled", "#dcd9d2"), ("active", hover)],
+                   darkcolor=[("disabled", "#dcd9d2"), ("active", hover)])
 
-        laser = ttk.Frame(self, padding=(12, 0, 12, 8))
+        button("TButton", BTN, INK, "#dcd7cb", padding=(11, 6))
+        button("Primary.TButton", INK, "#ffffff", "#3a4048", padding=(14, 7), font=("Segoe UI Semibold", 10))
+        button("Save.TButton", GREEN, "#ffffff", "#156331", padding=(14, 7), font=("Segoe UI Semibold", 10))
+        button("Fire.TButton", FIRE, "#ffffff", "#a42817", padding=(34, 15), font=("Segoe UI Semibold", 16))
+        st.configure("Seg.Toolbutton", background=BTN, foreground=INK, padding=(14, 7), anchor="center", bordercolor=BTN, lightcolor=BTN, darkcolor=BTN)
+        st.map("Seg.Toolbutton", background=[("selected", INK), ("active", "#dcd7cb")], foreground=[("selected", "#ffffff")],
+               lightcolor=[("selected", INK)], darkcolor=[("selected", INK)], bordercolor=[("selected", INK)])
+
+        head = tk.Frame(self, background=HEAD)
+        head.pack(fill="x")
+        tk.Label(head, text="Laser Station", background=HEAD, foreground="#ffffff", font=("Segoe UI Semibold", 17)).pack(side="left", padx=(20, 10), pady=11)
+        tk.Label(head, text="VLS 4.60", background=HEAD, foreground="#a8adb3", font=("Segoe UI", 10)).pack(side="left", pady=(6, 0))
+        self.bed_lbl = tk.Label(head, text="", background=HEAD, foreground="#d7d9dc", font=("Segoe UI", 10))
+        self.bed_lbl.pack(side="right", padx=20)
+
+        laser = ttk.Frame(self, padding=(20, 12, 20, 10))
         laser.pack(fill="x")
-        ttk.Label(laser, text="Laser driver", style="H.TLabel").pack(side="left", padx=(0, 8))
-        self.printer_box = ttk.Combobox(laser, textvariable=self.printer, state="readonly", width=36)
+        ttk.Label(laser, text="Laser driver", style="Bar.TLabel").pack(side="left", padx=(0, 8))
+        self.printer_box = ttk.Combobox(laser, textvariable=self.printer, state="readonly", width=34)
         self.printer_box.pack(side="left")
         self.printer_box.bind("<<ComboboxSelected>>", self.pick_printer)
-        self.driver_lbl = ttk.Label(laser, text="", font=("Segoe UI", 10, "bold"))
+        self.driver_lbl = ttk.Label(laser, text="", font=("Segoe UI Semibold", 10))
         self.driver_lbl.pack(side="left", padx=10)
-        st.configure("Save.TButton", font=("Segoe UI", 11, "bold"), foreground="#1b7a3d", padding=6)
         ttk.Button(laser, text="Save Laser Settings", style="Save.TButton", command=self.open_settings).pack(side="right")
-        ttk.Button(laser, text="Teach START", command=self.teach_start).pack(side="right", padx=(0, 6))
-        self.preset_lbl = ttk.Label(laser, text="", font=("Segoe UI", 10, "bold"))
-        self.preset_lbl.pack(side="right", padx=10)
+        ttk.Button(laser, text="Teach START", command=self.teach_start).pack(side="right", padx=(0, 8))
+        self.preset_lbl = ttk.Label(laser, text="", font=("Segoe UI Semibold", 10))
+        self.preset_lbl.pack(side="right", padx=12)
         self.refresh_driver()
 
         body = ttk.PanedWindow(self, orient="horizontal")
-        body.pack(fill="both", expand=True, padx=12)
+        body.pack(fill="both", expand=True, padx=20)
         left = ttk.Frame(body)
         body.add(left, weight=1)
-        ttk.Label(left, text="Parts (double-click to change how many)", style="H.TLabel").pack(anchor="w")
-        self.tree = ttk.Treeview(left, columns=("qty", "size", "note"), show="tree headings", height=14)
-        self.tree.heading("#0", text="Part")
+
+        job = ttk.Frame(left, style="Card.TFrame", padding=14)
+        job.pack(fill="x", pady=(0, 10), padx=(0, 6))
+        row = ttk.Frame(job, style="Inner.TFrame")
+        row.pack(fill="x")
+        ttk.Label(row, text="Team", style="Card.TLabel").pack(side="left")
+        ttk.Entry(row, textvariable=self.team, width=14).pack(side="left", padx=(8, 12))
+        ttk.Button(row, text="Open STEP / DXF…", style="Primary.TButton", command=self.open_files).pack(side="right")
+        modes = ttk.Frame(job, style="Inner.TFrame")
+        modes.pack(fill="x", pady=(12, 0))
+        modes.columnconfigure((0, 1), weight=1, uniform="m")
+        ttk.Radiobutton(modes, text="Cut through", style="Seg.Toolbutton", variable=self.mode, value="cut",
+                        command=self.mode_changed).grid(row=0, column=0, sticky="ew")
+        ttk.Radiobutton(modes, text="Engrave only", style="Seg.Toolbutton", variable=self.mode, value="engrave",
+                        command=self.mode_changed).grid(row=0, column=1, sticky="ew", padx=(6, 0))
+        row = ttk.Frame(job, style="Inner.TFrame")
+        row.pack(fill="x", pady=(12, 0))
+        ttk.Label(row, text="Thickness mm", style="Card.TLabel").pack(side="left")
+        ttk.Entry(row, textvariable=self.thk, width=5).pack(side="left", padx=(6, 14))
+        ttk.Label(row, text="Kerf mm", style="Card.TLabel").pack(side="left")
+        self.kerf_entry = ttk.Entry(row, textvariable=self.kerf, width=5)
+        self.kerf_entry.pack(side="left", padx=(6, 0))
+        ttk.Button(row, text="Re-layout", command=self.rebuild).pack(side="right")
+
+        parts = ttk.Frame(left, style="Card.TFrame", padding=14)
+        parts.pack(fill="both", expand=True, pady=(0, 2), padx=(0, 6))
+        row = ttk.Frame(parts, style="Inner.TFrame")
+        row.pack(fill="x")
+        ttk.Label(row, text="Parts", style="H.TLabel").pack(side="left")
+        ttk.Label(row, text="Double-click to change how many", style="Small.TLabel").pack(side="left", padx=10)
+        self.tree = ttk.Treeview(parts, columns=("qty", "size", "note"), show="tree headings", height=8)
+        self.tree.heading("#0", text="Part", anchor="w")
         self.tree.heading("qty", text="Qty")
-        self.tree.heading("size", text="Size mm")
-        self.tree.heading("note", text="Notes")
-        self.tree.column("#0", width=170)
-        self.tree.column("qty", width=40, anchor="center")
-        self.tree.column("size", width=90)
-        self.tree.column("note", width=170)
-        self.tree.pack(fill="both", expand=True, pady=(4, 6))
+        self.tree.heading("size", text="Size mm", anchor="w")
+        self.tree.heading("note", text="Notes", anchor="w")
+        self.tree.column("#0", width=150)
+        self.tree.column("qty", width=40, anchor="center", stretch=False)
+        self.tree.column("size", width=90, stretch=False)
+        self.tree.column("note", width=130)
+        self.tree.pack(fill="both", expand=True, pady=(6, 8))
         self.tree.bind("<Double-1>", self.edit_qty)
-        row = ttk.Frame(left)
+        row = ttk.Frame(parts, style="Inner.TFrame")
         row.pack(fill="x")
         ttk.Button(row, text="−", width=3, command=lambda: self.bump(-1)).pack(side="left")
-        ttk.Button(row, text="+", width=3, command=lambda: self.bump(+1)).pack(side="left", padx=4)
+        ttk.Button(row, text="+", width=3, command=lambda: self.bump(+1)).pack(side="left", padx=5)
         ttk.Button(row, text="All ×2", command=lambda: self.bump(0, mult=2)).pack(side="left")
-        self.msgs = tk.Text(left, height=9, wrap="word", relief="flat", background=self.cget("background"), font=("Segoe UI", 9))
-        self.msgs.pack(fill="x", pady=(8, 0))
-        self.msgs.tag_configure("bad", foreground=BAD, font=("Segoe UI", 9, "bold"))
+        self.msgs = tk.Text(parts, height=5, wrap="word", relief="flat", background=CARD, foreground=INK, font=("Segoe UI", 9), highlightthickness=0)
+        self.msgs.pack(fill="x", pady=(10, 0))
+        self.msgs.tag_configure("bad", foreground=BAD, font=("Segoe UI Semibold", 9))
         self.msgs.tag_configure("warn", foreground="#8a5a00")
 
-        right = ttk.Frame(body)
+        right = ttk.Frame(body, style="Card.TFrame", padding=14)
         body.add(right, weight=3)
-        hdr = ttk.Frame(right)
+        hdr = ttk.Frame(right, style="Inner.TFrame")
         hdr.pack(fill="x")
         self.sheet_lbl = ttk.Label(hdr, text="Wood in the laser", style="H.TLabel")
         self.sheet_lbl.pack(side="left")
         ttk.Button(hdr, text="▶", width=3, command=lambda: self.flip(1)).pack(side="right")
-        ttk.Button(hdr, text="◀", width=3, command=lambda: self.flip(-1)).pack(side="right")
-        self.canvas = tk.Canvas(right, background="#f7f6f2", highlightthickness=0)
-        self.canvas.pack(fill="both", expand=True, pady=4)
+        ttk.Button(hdr, text="◀", width=3, command=lambda: self.flip(-1)).pack(side="right", padx=5)
+        self.canvas = tk.Canvas(right, background=CARD, highlightthickness=0)
+        self.canvas.pack(fill="both", expand=True, pady=8)
         self.canvas.bind("<ButtonPress-1>", self.grab_part)
         self.canvas.bind("<B1-Motion>", self.move_part)
         self.canvas.bind("<ButtonRelease-1>", self.drop_part)
         self.canvas.bind("<Button-3>", self.rotate_part)
-        hint = ttk.Frame(right)
+        self.canvas.bind("<Motion>", self.hover_part)
+        hint = ttk.Frame(right, style="Inner.TFrame")
         hint.pack(fill="x")
-        ttk.Label(hint, text="Drag a part to choose where it cuts. Right-click a part to turn it.", foreground="#555").pack(side="left")
+        ttk.Label(hint, text="Drag a part to choose where it cuts. Right-click to turn it.", style="Small.TLabel").pack(side="left")
         ttk.Button(hint, text="Auto-arrange", command=self.auto_arrange).pack(side="right")
 
-        ttk.Label(self, text="FIRE starts the laser with one click. First check: wood matches the map, focus set, lid closed, exhaust on, "
-                  "scrap cleared, extinguisher close. Stay at the laser.", foreground=BAD, padding=(12, 6, 12, 0)).pack(fill="x")
-        bot = ttk.Frame(self, padding=(12, 8))
-        bot.pack(fill="x")
+        sep = tk.Frame(self, height=1, background=LINE)
+        bot = ttk.Frame(self, style="Inner.TFrame", padding=(20, 12))
+        bot.pack(side="bottom", fill="x", before=body)  # packed before the map so it can never be squeezed off
+        sep.pack(side="bottom", fill="x", before=body, pady=(12, 0))
         ttk.Button(bot, text="New sheet loaded", command=self.new_sheet).pack(side="left")
         ttk.Button(bot, text="Undo last cut", command=self.undo).pack(side="left", padx=6)
-        ttk.Button(bot, text="Save DXF + preview only", command=self.save_only).pack(side="left")
+        ttk.Button(bot, text="Save DXF + preview", command=self.save_only).pack(side="left")
         self.fire_btn = ttk.Button(bot, text="CUT  ▸  FIRE", style="Fire.TButton", command=self.fire)
         self.fire_btn.pack(side="right")
-        self.status = ttk.Label(bot, text="Open a STEP (Onshape: right-click the Part Studio tab > Export > STEP).", foreground="#555")
-        self.status.pack(side="right", padx=14)
+        mid = ttk.Frame(bot, style="Inner.TFrame")
+        mid.pack(side="right", padx=20)
+        self.status = ttk.Label(mid, text="Open a STEP file. In Onshape: right-click the Part Studio tab, then Export, then STEP.",
+                                style="Status.TLabel", wraplength=560)
+        self.status.pack(anchor="e")
+        ttk.Label(mid, text="FIRE starts the laser in one click. Check wood, focus, lid, exhaust, scrap and extinguisher first. Stay at the laser.",
+                  style="Warn.TLabel", wraplength=560).pack(anchor="e", pady=(3, 0))
 
     # ------------------------------------------------------------------ state
     def _printer(self):
@@ -428,7 +484,13 @@ class Station(tk.Tk):
 
         sheet = self.job.sheets[self.view] if self.job and self.job.sheets else None
         c.create_rectangle(ox, oy, ox + bw * k, oy + bh * k, fill=WOOD, outline="#8b7a5a")
+        for mm in range(100, int(bw), 100):
+            c.create_line(ox + mm * k, oy, ox + mm * k, oy + bh * k, fill="#e2cfa6")
+        for mm in range(100, int(bh), 100):
+            c.create_line(ox, oy + mm * k, ox + bw * k, oy + mm * k, fill="#e2cfa6")
         c.create_text(ox + 4, oy + 4, text="top-left corner of the bed", anchor="nw", fill="#8b7a5a", font=("Segoe UI", 8))
+        if not self.job:
+            c.create_text(ox + bw * k / 2, oy + bh * k / 2, text="Open a STEP or DXF file to place your parts", fill="#8b7a5a", font=("Segoe UI", 13))
         if sheet is None or not sheet.needs_new_wood:
             for u in self.bed.used_shapes():
                 for g in getattr(u, "geoms", [u]):
@@ -477,6 +539,9 @@ class Station(tk.Tk):
         w, h = x1 - x0, y1 - y0
         pl.x += max(m, min(self.bed.w - m - w, x0)) - x0
         pl.y += max(m, min(self.bed.h - m - h, y0)) - y0
+
+    def hover_part(self, e):
+        self.canvas.config(cursor="fleur" if self._part_at(e) else "")
 
     def grab_part(self, e):
         pl = self._part_at(e)
