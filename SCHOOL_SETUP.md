@@ -36,11 +36,12 @@ If your wood or laser changes, do this again.
 4. Click **Open STEP / DXF** and pick `C:\LaserStation\samples\test-part-studio.step`
 5. Double-click each **Frame Plate** and set it to **0**. Only "Pocketed plate" stays.
    A warning about pockets is normal for this test part.
-6. Leave it on **Cut through**. Click **CUT ▸ FIRE**, then **Yes, FIRE**.
-7. **The laser won't start yet.** In UCP, select the job and click **Settings**.
+6. Leave it on **Cut through**. Click **CUT ▸ FIRE**.
+7. **The first job waits for a one-time check.** In UCP, click **Settings** for the job.
    Do Red and Blue show your numbers?
-   - **Yes:** answer Yes in Laser Station, then press the green **START** in UCP.
+   - **Yes:** answer Yes. It presses START for you.
    - **No:** answer No and **don't press START**. Tell Claude "presets don't stick".
+8. If it says it couldn't press START, press it yourself and answer Yes to teach it. Hold the mouse on the green START for 6 seconds without clicking.
 
 Now check these:
 
@@ -57,8 +58,8 @@ Then do the same test with **Engrave only** selected. It should mark the surface
 Finally, open one of your real Onshape files and check the part names and holes look right.
 This is the first real Onshape file it will have read.
 
-The next job will press **START** by itself. Check that it does. If it doesn't, press it yourself and paste
-`C:\LaserStation\ucp_controls.txt` into Claude.
+Watch the next job closely. It should press **START** by itself on the job you just sent, not an older one in UCP's list.
+If it picks an older job, press **PAUSE**, then tell Claude "START ran the wrong job".
 
 ## Every day
 
@@ -68,7 +69,7 @@ The next job will press **START** by itself. Check that it does. If it doesn't, 
 4. Pick **Cut through** or **Engrave only**.
 5. Look at the parts list. Set anything you don't want to **0**.
 6. Want it somewhere else? **Drag the part** on the map. **Right-click** it to turn it. A red outline means that spot is taken.
-7. Click **FIRE**, then **Yes, FIRE**. Stay at the laser.
+7. Check the red line above FIRE. Then click **FIRE** once. Stay at the laser.
 
 ## Rules for the laser room
 

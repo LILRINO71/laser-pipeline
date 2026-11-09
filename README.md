@@ -32,8 +32,8 @@ To rebuild the installer: `python tools/build_usb.py` (makes `dist/usb/`).
    Double-click a part to change how many you need.
 4. Pick **Cut through** or **Engrave only**. Power and speed come from the settings saved once with
    **Save Laser Settings**, so nobody picks them per job. Drag a part on the map to choose where it cuts, right-click to turn it.
-5. Click **FIRE**. Answer the one question (wood matches the map, focus set, lid closed, exhaust on,
-   scrap cleared, extinguisher in reach, you'll stay). The job goes to the laser and UCP's Start is pressed for you.
+5. Click **FIRE** once. The job goes to the laser and UCP's Start is pressed for you. The only question left is when a
+   job needs fresh wood. If Start can't be pressed, **Teach START** shows the program where the button is.
 6. When someone puts a fresh sheet in, click **New sheet loaded**. If a cut never happened (cancelled in
    UCP, power cut), click **Undo last cut** so that wood isn't counted as used.
 
@@ -46,13 +46,13 @@ finishes, swap the wood and press FIRE again.
 |---|---|
 | Part runs off the sheet | **blocked**, won't send |
 | Part would land on wood that's already cut, or on another part | **blocked** |
-| Same files + quantities sent in the last 30 min | asks "already cut, again?" |
+| Same files + quantities sent in the last 30 min | noted on the status line |
 | Part isn't 6 mm (motor, bracket, spacer…) | skipped, listed in the notes |
 | Plate has pockets / steps / chamfers (STEP only) | warning: they'd be cut straight through |
 | Edges that don't join into a closed outline | warning, and those edges are left out |
 | Part bigger than the bed | left out, listed in red |
 | DXF with no units | warning, assumes mm |
-| Laser fires | only after the "Ready to fire?" question is answered Yes |
+| Job needs fresh wood | asks once that a new sheet is loaded before firing |
 | Laser settings never saved, or the driver changed | **blocked**, won't send |
 | First job after saving settings | not started until someone confirms UCP shows the saved numbers |
 | Engrave only | every line is sent blue, so the job contains no cut-power line |

@@ -43,6 +43,9 @@ def main():
         shutil.copytree(ROOT / d, APP / d, ignore=shutil.ignore_patterns("__pycache__"))
     for junk in list(APP.rglob("__pycache__")):
         shutil.rmtree(junk, ignore_errors=True)
+    print("Precompiling so it starts fast...")
+    subprocess.run([exe, "-m", "compileall", "-q", "-j", "0", "--invalidation-mode", "unchecked-hash",
+                    py / "Lib", APP / "laserpipe"], env=env)  # a few test files in libraries never compile; that's fine
     print("Zipping...")
     z = USB / "LaserStation.zip"
     with zipfile.ZipFile(z, "w", zipfile.ZIP_DEFLATED, compresslevel=6, allowZip64=True) as zf:

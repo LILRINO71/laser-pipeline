@@ -45,10 +45,14 @@ class Station(tk.Tk):
         self.need_check = False
         self.busy = False
         self.settings_stamp = None
+        self.loading = False
+        self.start_failed = False
+        self.draw_queued = False
         self._build_ui()
         self._watch_settings()
         self.refresh_bed()
-        self.bind("<Configure>", lambda e: self.after_idle(self.draw))
+        self.bind("<Configure>", self._queue_draw)
+        threading.Thread(target=self._warm_up, daemon=True).start()
 
     # ------------------------------------------------------------------ UI
     def _build_ui(self):
@@ -86,6 +90,7 @@ class Station(tk.Tk):
         self.driver_lbl.pack(side="left", padx=10)
         st.configure("Save.TButton", font=("Segoe UI", 11, "bold"), foreground="#1b7a3d", padding=6)
         ttk.Button(laser, text="Save Laser Settings", style="Save.TButton", command=self.open_settings).pack(side="right")
+        ttk.Button(laser, text="Teach START", command=self.teach_start).pack(side="right", padx=(0, 6))
         self.preset_lbl = ttk.Label(laser, text="", font=("Segoe UI", 10, "bold"))
         self.preset_lbl.pack(side="right", padx=10)
         self.refresh_driver()
@@ -135,6 +140,8 @@ class Station(tk.Tk):
         ttk.Label(hint, text="Drag a part to choose where it cuts. Right-click a part to turn it.", foreground="#555").pack(side="left")
         ttk.Button(hint, text="Auto-arrange", command=self.auto_arrange).pack(side="right")
 
+        ttk.Label(self, text="FIRE starts the laser with one click. First check: wood matches the map, focus set, lid closed, exhaust on, "
+                  "scrap cleared, extinguisher close. Stay at the laser.", foreground=BAD, padding=(12, 6, 12, 0)).pack(fill="x")
         bot = ttk.Frame(self, padding=(12, 8))
         bot.pack(fill="x")
         ttk.Button(bot, text="New sheet loaded", command=self.new_sheet).pack(side="left")
@@ -187,17 +194,55 @@ class Station(tk.Tk):
         else:
             self.preset_lbl.config(text="Laser settings: saved, check on next job", foreground="#8a5a00")
 
-    def pick_printer(self, _e=None):
-        name = self.printer.get()
-        self.cfg["printer"] = name
+    def _warm_up(self):
+        """Load the slow CAD libraries while the window is already usable."""
+        try:
+            import build123d  # noqa: F401
+            import ezdxf  # noqa: F401
+        except Exception:
+            pass  # reading a file will report the real problem
+
+    def _queue_draw(self, _e=None):
+        if not self.draw_queued:
+            self.draw_queued = True
+            self.after(60, self._run_draw)
+
+    def _run_draw(self):
+        self.draw_queued = False
+        self.draw()
+
+    def _save_local(self, **values):
+        self.cfg.update(values)
         path = ROOT / "config.local.json"
         try:
             local = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             local = {}
-        local["printer"] = name
+        local.update(values)
         path.write_text(json.dumps(local, indent=1), encoding="utf-8")
+
+    def pick_printer(self, _e=None):
+        self._save_local(printer=self.printer.get())
         self.refresh_driver()
+
+    def teach_start(self):
+        messagebox.showinfo("Teach START", "Open UCP so the green START button is showing.\n\nAfter you press OK you have 6 seconds. "
+                            "Hold the mouse pointer on the green START. Don't click it.")
+        self._teach_count(6)
+
+    def _teach_count(self, n):
+        from laserpipe import ucp
+
+        if n > 0:
+            self.status.config(text=f"Hold the mouse on the green START in UCP. Don't click… {n}")
+            self.after(1000, self._teach_count, n - 1)
+            return
+        got = ucp.read_point()
+        if not got["ucp_window_title"] or got["ucp_window_title"] == self.title():
+            self.status.config(text="The mouse wasn't on UCP. Click Teach START and try again.")
+            return
+        self._save_local(**got)
+        self.status.config(text="START learned. Jobs will press it for you. Watch the next one.")
 
     def open_settings(self):
         import win32gui
@@ -271,15 +316,26 @@ class Station(tk.Tk):
     def open_files(self):
         paths = filedialog.askopenfilenames(title="Pick your Onshape export", initialdir=str(Path.home() / "Downloads"),
                                             filetypes=[("STEP or DXF", "*.step *.stp *.STEP *.dxf *.DXF"), ("All", "*.*")])
-        if not paths:
+        if not paths or self.loading:
             return
-        self.job = Job(self.cfg, self.team.get())
+        self.loading = True
+        self.status.config(text="Reading your file…")
+        threading.Thread(target=self._read_files, args=(paths, Job(self.cfg, self.team.get())), daemon=True).start()
+
+    def _read_files(self, paths, job):
         try:
-            self.job.add_files(paths)
+            job.add_files(paths)
+            self.after(0, self._files_read, job, None)
         except Exception as e:
-            messagebox.showerror("Couldn't read that file", str(e))
-            self.job = None
+            self.after(0, self._files_read, None, e)
+
+    def _files_read(self, job, err):
+        self.loading = False
+        if err:
+            self.status.config(text="Couldn't read that file.")
+            messagebox.showerror("Couldn't read that file", str(err))
             return
+        self.job = job
         self.qty = {}
         self.rebuild()
 
@@ -504,69 +560,63 @@ class Station(tk.Tk):
             if messagebox.askyesno("Can't fire yet", f"{problem}\n\nOpen the laser settings now?"):
                 self.open_settings()
             return
-        dup = j.duplicate_of()
-        if dup and not messagebox.askyesno("Already cut?", f"These exact parts were sent by {dup}.\nCut them again?"):
-            return
-        if not self.ask_ready(s, i):
-            return
+        if s.needs_new_wood:  # the one question left: firing here without swapping would cut over old cuts
+            if not messagebox.askyesno("Fresh wood needed", f"Sheet {i + 1} needs a NEW sheet of wood.\n\nIs a fresh sheet in the laser now?"):
+                return
+            self.bed.new_sheet()
+            s.needs_new_wood = False
         self._save_prefs()
         self.busy = True
         self.fire_btn.state(["disabled"])
         self.status.config(text=f"Sending sheet {i + 1} to the laser…")
         threading.Thread(target=self._send, args=(i,), daemon=True).start()
 
-    def ask_ready(self, s, i) -> bool:
-        """The one question before the laser fires."""
-        d = tk.Toplevel(self)
-        d.title("Ready to fire?")
-        d.transient(self)
-        d.grab_set()
-        d.resizable(False, False)
-        wood = ("Swap in a NEW sheet of plywood first (the map will reset)." if s.needs_new_wood
-                else "The plywood in the laser is the sheet on screen (grey = already cut), pushed into the top-left corner.")
-        what = ("ENGRAVE ONLY: nothing will be cut through." if self.job.mode == "engrave"
-                else "CUT THROUGH: the red lines go all the way through the wood.")
-        txt = (f"{what}\n\nFire the laser for {len(s.placements)} part(s) on sheet {i + 1}?\n\n"
-               f"•  {wood}\n•  Focus is set for this wood.\n•  Lid closed, exhaust / air assist on.\n"
-               "•  Old scrap is cleared out and the fire extinguisher is within reach.\n"
-               "•  You'll stay at the laser until it finishes.")
-        ttk.Label(d, text=txt, padding=18, wraplength=440, justify="left", font=("Segoe UI", 10)).pack()
-        ans = {"ok": False}
-        row = ttk.Frame(d, padding=(18, 0, 18, 16))
-        row.pack(fill="x")
+    def _press_start(self):
+        from laserpipe import ucp
 
-        def yes():
-            ans["ok"] = True
-            d.destroy()
-
-        ttk.Button(row, text="Cancel", command=d.destroy).pack(side="right")
-        ttk.Button(row, text="Yes, FIRE", style="Fire.TButton", command=yes).pack(side="right", padx=8)
-        d.bind("<Escape>", lambda e: d.destroy())
-        self.wait_window(d)
-        if ans["ok"] and s.needs_new_wood:
-            self.bed.new_sheet()
-            s.needs_new_wood = False
-        return ans["ok"]
+        return ucp.press_start(self.cfg.get("ucp_start_button"), point=self.cfg.get("ucp_start_point"), title=self.cfg.get("ucp_window_title"))
 
     def _send(self, i):
-        from laserpipe import ucp, vls_print
+        from laserpipe import vls_print
 
         j = self.job
         try:
             test_pdf = self.cfg.get("test_pdf_dir")
             printer = vls_print.find_laser_printer("Microsoft Print to PDF" if test_pdf else self.cfg.get("printer"))
+            dup = j.duplicate_of()
             j.send(i, printer, Path(test_pdf) if test_pdf else None)
             j.record(self.bed, i)
-            msg = f"Sheet {i + 1} sent to {printer}."
+            msg = f"Sheet {i + 1} sent." + (f" The same parts were also sent by {dup}." if dup else "")
             self.need_check = not test_pdf and not vls_print.preset_verified(printer)
+            self.start_failed = False
             if self.need_check:
                 msg += " It has NOT started."
             elif self.cfg.get("auto_start") and not test_pdf:
-                ok, m = ucp.press_start(self.cfg.get("ucp_start_button"))
+                ok, m = self._press_start()
+                self.start_failed = not ok
                 msg += " " + m
             self.after(0, self._sent, i, msg, None)
         except BaseException as e:  # SystemExit from the printer helpers too
             self.after(0, self._sent, i, None, f"{e}\n\n{traceback.format_exc(limit=2)}")
+
+    def _start_now(self):
+        try:
+            ok, m = self._press_start()
+        except Exception as e:
+            ok, m = False, str(e)
+        self.after(0, self._start_done, ok, m)
+
+    def _start_done(self, ok, msg):
+        self.busy = False
+        self.fire_btn.state(["!disabled"])
+        self.status.config(text=msg)
+        if not ok:
+            self.offer_teach(msg)
+
+    def offer_teach(self, msg):
+        if messagebox.askyesno("Press START yourself this time", f"{msg}\n\nPress the green START in UCP yourself for this job.\n\n"
+                               "Show Laser Station where START is, so next time it's one click?"):
+            self.teach_start()
 
     def _sent(self, i, msg, err):
         self.busy = False
@@ -578,16 +628,16 @@ class Station(tk.Tk):
         self.status.config(text=msg)
         if self.need_check:
             self.check_preset()
+        if self.start_failed:
+            self.offer_teach(msg)
         j = self.job
         left = [k for k in range(len(j.sheets)) if k > i]
         if left:
             self.view = left[0]
             self.draw()
-            messagebox.showinfo("Sent", msg + f"\n\nSheet {left[0] + 1} needs fresh plywood. When this cut is done, swap the wood "
-                                "and press FIRE again.")
+            self.status.config(text=f"{msg} Next: swap in fresh wood for sheet {left[0] + 1}, then FIRE.")
         else:
             self.bed = Bed.load(*self.cfg["sheet_mm"])
-            messagebox.showinfo("Sent", msg + "\n\nThe used wood is marked on the map for the next team.")
             self.job = None
             self.tree.delete(*self.tree.get_children())
             self.mode.set("cut")
@@ -599,12 +649,17 @@ class Station(tk.Tk):
         """First job after saving: prove the numbers reached UCP before the laser may start itself."""
         from laserpipe import vls_print
 
-        if messagebox.askyesno("Check the laser settings",
-                               "The laser has NOT started.\n\nIn UCP, select this job and click Settings.\n\n"
-                               "Do Red and Blue show the power and speed you saved?"):
+        if messagebox.askyesno("One-time check: laser settings",
+                               "The laser has NOT started. You only do this check once.\n\n"
+                               "In UCP, click Settings for this job. Do Red and Blue show the power and speed you saved?\n\n"
+                               "Yes starts the laser now, and every job after this starts in one click."):
             vls_print.mark_verified(self._printer())
             self.refresh_driver()
-            messagebox.showinfo("Locked in", "Good. Press the green START in UCP for this job.\n\nFrom now on Start is pressed for you.")
+            if self.cfg.get("auto_start"):
+                self.busy = True
+                self.fire_btn.state(["disabled"])
+                self.status.config(text="Pressing START…")
+                threading.Thread(target=self._start_now, daemon=True).start()
         else:
             messagebox.showwarning("Don't start this job", "Do NOT press START.\n\nDelete this job in UCP and click Undo last cut.\n\n"
                                    "Then tell Claude: \"presets don't stick\". Until that's fixed, the laser will never start by itself.")

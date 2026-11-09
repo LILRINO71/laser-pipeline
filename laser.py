@@ -109,7 +109,7 @@ def main(argv=None):
         if not test_pdf and not vls_print.preset_verified(printer):
             msg += " In UCP click Settings and check Red and Blue, then press START yourself."
         elif cfg.get("auto_start") and not test_pdf:
-            msg += " " + ucp.press_start(cfg.get("ucp_start_button"))[1]
+            msg += " " + ucp.press_start(cfg.get("ucp_start_button"), point=cfg.get("ucp_start_point"), title=cfg.get("ucp_window_title"))[1]
         print(msg)
 
 
