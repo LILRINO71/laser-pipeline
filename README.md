@@ -31,7 +31,7 @@ To rebuild the installer: `python tools/build_usb.py` (makes `dist/usb/`).
 3. Check the layout. **Grey** = wood other teams already cut. **Red** = your cuts. **Blue** = part names.
    Double-click a part to change how many you need.
 4. Pick **Cut through** or **Engrave only**. Power and speed come from the settings saved once with
-   **Laser settings…**, so nobody picks them per job. Drag a part on the map to choose where it cuts, right-click to turn it.
+   **Save Laser Settings**, so nobody picks them per job. Drag a part on the map to choose where it cuts, right-click to turn it.
 5. Click **FIRE**. Answer the one question (wood matches the map, focus set, lid closed, exhaust on,
    scrap cleared, extinguisher in reach, you'll stay). The job goes to the laser and UCP's Start is pressed for you.
 6. When someone puts a fresh sheet in, click **New sheet loaded**. If a cut never happened (cancelled in

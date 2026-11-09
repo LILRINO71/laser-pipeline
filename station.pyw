@@ -84,7 +84,8 @@ class Station(tk.Tk):
         self.printer_box.bind("<<ComboboxSelected>>", self.pick_printer)
         self.driver_lbl = ttk.Label(laser, text="", font=("Segoe UI", 10, "bold"))
         self.driver_lbl.pack(side="left", padx=10)
-        ttk.Button(laser, text="Laser settings…", command=self.open_settings).pack(side="right")
+        st.configure("Save.TButton", font=("Segoe UI", 11, "bold"), foreground="#1b7a3d", padding=6)
+        ttk.Button(laser, text="Save Laser Settings", style="Save.TButton", command=self.open_settings).pack(side="right")
         self.preset_lbl = ttk.Label(laser, text="", font=("Segoe UI", 10, "bold"))
         self.preset_lbl.pack(side="right", padx=10)
         self.refresh_driver()
@@ -215,7 +216,8 @@ class Station(tk.Tk):
         messagebox.showinfo("Laser settings", "In the next window, open the Manual Control tab.\n\n"
                             "1.  Click Red. Enter your cut-through power and speed. Press Set.\n"
                             "2.  Click Blue. Enter your engrave power and speed. Press Set.\n"
-                            "3.  Press OK.\n\nOK is what saves them here. You don't need the Save button.")
+                            "3.  Press the red OK button.\n\n"
+                            "The red OK is what saves them here. Don't use the red Save in that window: it only makes a backup file.")
         try:
             ok = vls_print.setup_settings(printer, win32gui.GetAncestor(self.winfo_id(), 2))
         except BaseException as e:
@@ -225,7 +227,7 @@ class Station(tk.Tk):
         problem = vls_print.preset_problem(printer)
         if not ok:
             messagebox.showwarning("Nothing was saved", "The settings window closed without OK, so nothing was saved.\n\n"
-                                   "Click Laser settings… again and press OK at the end.")
+                                   "Click Save Laser Settings again and press the red OK at the end.")
         elif problem:
             messagebox.showerror("Not saved", f"{problem}\n\nTake a photo of this and show it to Claude.")
         else:

@@ -17,11 +17,13 @@ Use the power and speed that you already know cut your wood cleanly. Laser Stati
 
 1. Open **Laser Station**. Next to **Laser driver** it should say **✓ Found**.
    If it says **NOT FOUND**, pick the laser from that list. If the laser isn't in the list, UCP isn't installed yet.
-2. Click **Laser settings…** at the top right.
-3. In the window that opens, go to the **Manual Control** tab.
+2. Click the green **Save Laser Settings** button at the top right.
+3. In the red-and-gray window that opens, go to the **Manual Control** tab.
 4. Click **Red** and enter your **cut through** power and speed. Press **Set**.
 5. Click **Blue** and enter your **engrave** power and speed. Press **Set**.
-6. Press **OK**. That's what saves them. It should now say **Laser settings: saved**.
+6. Press the red **OK**. That's what saves them. It should now say **Laser settings: saved**.
+
+Don't use the red **Save** in that window. It only makes a backup file.
 
 Every job now uses these numbers. Nobody picks power or speed in Laser Station.
 If your wood or laser changes, do this again.
