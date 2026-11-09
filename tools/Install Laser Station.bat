@@ -24,7 +24,7 @@ if not exist "%SRC%LaserStation.zip" (
 )
 echo Installing to %TARGET% ...
 if not exist "%TARGET%" mkdir "%TARGET%"
-tar -xf "%SRC%LaserStation.zip" -C "%TARGET%"
+"%SystemRoot%\System32\tar.exe" -xf "%SRC%LaserStation.zip" -C "%TARGET%"
 if errorlevel 1 (
   echo Could not unpack the files.
   goto :failed

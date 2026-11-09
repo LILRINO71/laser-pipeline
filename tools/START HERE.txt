@@ -1,0 +1,10 @@
+LASER STATION: START HERE
+
+1. Plug this stick into the laser PC.
+2. Double-click "Install Laser Station.bat".
+3. Type the admin password when Windows asks.
+4. Wait for "Done", then press any key.
+
+Then open C:\LaserStation\SCHOOL_SETUP.md for the test cut.
+
+Stuck? Send a photo of the screen to Claude on the web.

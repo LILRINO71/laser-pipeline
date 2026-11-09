@@ -1,58 +1,59 @@
-# Setting up Laser Station on the school laser PC
+# Laser Station: super simple setup
 
-You'll do this yourself, without Claude Code. If anything goes wrong, open Claude on the web, paste this
-whole file plus the exact error text (or a photo), and ask what to do.
+Stuck? Open Claude on the web, paste this page, and add a photo of the screen.
 
-## 1. Install (one click)
+## 1. Install (one time)
 
-1. On your home PC, drag the two files in `laser-pipeline\dist\usb` onto any USB stick:
-   `Install Laser Station.bat` and `LaserStation.zip`. Keep them together.
-2. On the laser PC, double-click **Install Laser Station.bat** and enter the admin password when Windows asks.
+1. Plug the USB stick into the laser PC.
+2. Double-click **Install Laser Station.bat**.
+3. Type the admin password when Windows asks.
+4. Wait for **Done**, then press any key.
 
-It takes about a minute. You don't need to install Python and it doesn't need the internet: the stick carries its
-own copy of Python with the exact libraries that were tested. It installs to `C:\LaserStation`, puts a
-**Laser Station** icon on the desktop for every Windows login, and lets every login share the same sheet map.
+You now have a **Laser Station** icon on the desktop.
 
-The window should end with "Found: <laser printer>" and "Done". If it says the laser's driver wasn't found,
-it lists the printers it can see. Create `C:\LaserStation\config.local.json` containing
-`{"printer": "the laser's exact name"}`.
+## 2. Set the colors in UCP (one time)
 
-Running the installer again later is safe. It updates the program and keeps the sheet map and settings.
+Open UCP and set:
 
-## 2. Match UCP's colours (once)
+- **Red** = cut, with your normal 6 mm plywood settings
+- **Blue** = light score, low power and fast
+- Every other color off
 
-Open UCP → Settings (or the materials/manual tab):
-- **Red (255, 0, 0)** = vector **cut** with your 6 mm plywood power/speed (what you already use).
-- **Blue (0, 0, 255)** = light vector **score** for the part names (low power, fast).
-- Every other colour off.
+## 3. Test cut (one time, stay at the laser)
 
-## 3. First test cut (do this before you trust it). Stay at the laser.
+1. Put scrap 6 mm plywood in the **top-left corner** of the bed and focus.
+2. Open **Laser Station**. Type `test` as the team.
+3. Click **New sheet loaded**.
+4. Click **Open STEP / DXF** and pick `C:\LaserStation\samples\test-part-studio.step`
+5. Double-click each **Frame Plate** and set it to **0**. Only "Pocketed plate" stays.
+   A warning about pockets is normal for this test part.
+6. Click **CUT ▸ FIRE**, then **Yes**.
 
-1. Put a scrap of 6 mm plywood in the **top-left corner** of the bed and focus.
-2. Open **Laser Station** → team "test" → **New sheet loaded** → open `C:\LaserStation\samples\test-part-studio.step`.
-3. In the parts list, set Frame Plate +Y and -Y to **0** (double-click) so only the small "Pocketed plate" is left.
-4. **CUT ▸ FIRE** → Yes.
-5. Check each of these:
+Now check these:
 
 | Check | If it's wrong |
 |---|---|
-| In UCP's preview the part shows as **lines (vector)**, not a filled image | tell Claude: "UCP shows raster" |
-| It landed near the **top-left** of the bed, not mirrored or flipped | tell Claude what you saw: "mirrored", "bottom-left", etc. |
-| UCP's **Start was pressed** by itself | press it yourself this time, then paste `C:\LaserStation\ucp_controls.txt` into Claude to get the right `ucp_start_button` value |
-| No popup asking for settings on every job | run `C:\LaserStation\python\python.exe C:\LaserStation\laser.py --setup` once and pick your settings there |
-| Outside size is **80 × 50 mm** (measure with calipers) | type the difference into the **Kerf** box, e.g. measured 79.8 → `0.2`. It's remembered |
-| Part name is scored lightly in blue, not cut through | lower the blue power in UCP |
+| UCP shows **lines**, not a filled picture | Tell Claude "UCP shows raster" |
+| The part landed **top-left**, not flipped | Tell Claude what you saw |
+| **Start** got pressed by itself | Press it yourself. Paste `C:\LaserStation\ucp_controls.txt` into Claude |
+| The name is **scored**, not cut through | Lower the blue power in UCP |
+| No settings popup appears | Tell Claude "settings popup every job" |
+| The part measures **80 × 50 mm** | Measured 79.8? Type `0.2` in the **Kerf** box. It's remembered |
 
-6. **Then test a real export:** in Onshape, right-click your plates' Part Studio tab → Export → STEP, and open that file.
-   Check that the part names, thicknesses and hole count look right before you cut. (Everything so far was tested on
-   sample files, so this is the first real Onshape export it will read.)
+Then open one of your real Onshape files and check the part names and holes look right.
+This is the first real Onshape file it will have read.
 
-Once these pass, it's ready for real plates.
+## Every day
 
-## Everyday rules for the laser room (print this)
+1. In Onshape, right-click your Part Studio tab, then **Export**, then **STEP**.
+2. Open **Laser Station** and type your team.
+3. Click **Open STEP / DXF** and pick your file.
+4. Look at the parts list. Set anything you don't want to **0**.
+5. Click **CUT ▸ FIRE**, then **Yes**. Stay at the laser.
 
-1. Fresh sheet in? Click **New sheet loaded** first.
-2. Don't move or flip the wood between teams. The map assumes it's still in the top-left corner.
-3. Look at the parts list before firing. Any 6 mm part counts, so set things you don't want to 0.
-4. Job cancelled or didn't cut? Click **Undo last cut**.
-5. Never walk away while it's cutting.
+## Rules for the laser room
+
+- New wood in the laser? Click **New sheet loaded**.
+- Never move the wood between teams.
+- Job didn't cut? Click **Undo last cut**.
+- Never walk away while it's cutting.

@@ -1,7 +1,8 @@
 """Build the one-click USB installer in dist/usb/ (run on a PC with Python 3.14 installed).
 
 Makes a private copy of Python with the exact tested libraries, adds the app, and zips it.
-The result is two files to drag onto any USB stick:
+The result is three files to drag onto any USB stick:
+    START HERE.txt
     Install Laser Station.bat
     LaserStation.zip
 """
@@ -49,6 +50,7 @@ def main():
             if f.is_file():
                 zf.write(f, f.relative_to(APP))
     shutil.copy2(ROOT / "tools" / "Install Laser Station.bat", USB / "Install Laser Station.bat")
+    shutil.copy2(ROOT / "tools" / "START HERE.txt", USB / "START HERE.txt")
     print(f"Done: {USB}  ({z.stat().st_size / 1e6:.0f} MB zip, {sum(f.stat().st_size for f in APP.rglob('*') if f.is_file()) / 1e6:.0f} MB installed)")
 
 
