@@ -4,12 +4,13 @@ Stuck? Open Claude on the web, paste this page, and add a photo of the screen.
 
 ## 1. Install (one time)
 
-1. Plug the USB stick into the laser PC.
-2. Double-click **Install Laser Station.bat**.
+1. On the laser PC, click this link: **[Install Laser Station](https://github.com/LILRINO71/laser-pipeline/releases/latest/download/Install-Laser-Station.bat)**
+2. Open the file it downloads. If a blue box says "Windows protected your PC", click **More info**, then **Run anyway**.
 3. Type the admin password when Windows asks.
-4. Wait for **Done**, then press any key.
+4. Wait for **Done**, then press any key. The download can take a few minutes.
 
 You now have a **Laser Station** icon on the desktop.
+To update later, do the same thing. Your sheet map and settings are kept.
 
 ## 2. Save the laser settings (one time, only the person in charge)
 

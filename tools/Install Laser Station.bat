@@ -1,5 +1,7 @@
 @echo off
-rem One-click install of Laser Station from this USB stick. Safe to run again: the sheet map and settings are kept.
+rem One-click install of Laser Station. Safe to run again: the sheet map and settings are kept.
+rem Named Install-Laser-Station.bat it always downloads the newest version from GitHub.
+rem Next to LaserStation.zip (the USB stick) it uses that zip.
 rem A folder argument installs there with no admin and no shortcut (used for testing).
 setlocal
 set "SRC=%~dp0"
@@ -18,17 +20,30 @@ if not defined TESTMODE (
 )
 
 title Installing Laser Station
-if not exist "%SRC%LaserStation.zip" (
-  echo LaserStation.zip is missing. It must be next to this file on the stick.
+set "ZIP=%SRC%LaserStation.zip"
+set "DOWNLOADED="
+if /i "%~n0"=="Install-Laser-Station" goto :download
+if exist "%ZIP%" goto :have_zip
+
+:download
+set "ZIP=%TEMP%\LaserStation-download.zip"
+set "DOWNLOADED=1"
+echo Downloading Laser Station (about 250 MB). This can take a few minutes...
+"%SystemRoot%\System32\curl.exe" -L --fail --retry 3 -o "%ZIP%" "https://github.com/LILRINO71/laser-pipeline/releases/latest/download/LaserStation.zip"
+if errorlevel 1 (
+  echo Could not download it. Check the internet connection, or install from the USB stick.
   goto :failed
 )
+
+:have_zip
 echo Installing to %TARGET% ...
 if not exist "%TARGET%" mkdir "%TARGET%"
-"%SystemRoot%\System32\tar.exe" -xf "%SRC%LaserStation.zip" -C "%TARGET%"
+"%SystemRoot%\System32\tar.exe" -xf "%ZIP%" -C "%TARGET%"
 if errorlevel 1 (
   echo Could not unpack the files.
   goto :failed
 )
+if defined DOWNLOADED del "%ZIP%"
 
 if not defined TESTMODE (
   rem Every Windows login on this PC shares the same sheet map, so all users need write access.
@@ -47,7 +62,7 @@ if errorlevel 1 (
 echo.
 echo Looking for the laser's printer driver...
 "%PY%" -E -s -c "import sys; sys.path.insert(0, r'%TARGET%'); from laserpipe.vls_print import find_laser_printer as f; print('Found:', f())"
-if errorlevel 1 echo WARNING: the laser's driver wasn't found. Install UCP first, then run this again.
+if errorlevel 1 echo WARNING: the laser's driver wasn't found. You can pick it in Laser Station's Laser driver list.
 
 set "LINKDIR=%PUBLIC%\Desktop"
 if defined TESTMODE set "LINKDIR=%TARGET%"

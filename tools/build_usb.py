@@ -54,6 +54,7 @@ def main():
                 zf.write(f, f.relative_to(APP))
     shutil.copy2(ROOT / "tools" / "Install Laser Station.bat", USB / "Install Laser Station.bat")
     shutil.copy2(ROOT / "tools" / "START HERE.txt", USB / "START HERE.txt")
+    shutil.copy2(ROOT / "tools" / "Install Laser Station.bat", DIST / "Install-Laser-Station.bat")  # the one-click download for GitHub
     print(f"Done: {USB}  ({z.stat().st_size / 1e6:.0f} MB zip, {sum(f.stat().st_size for f in APP.rglob('*') if f.is_file()) / 1e6:.0f} MB installed)")
 
 

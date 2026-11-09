@@ -11,14 +11,14 @@ Onshape: right-click Part Studio tab > Export > STEP      (or a face / drawing e
    ──▶ the cut parts are marked on the sheet map for the next team
 ```
 
-There's no Onshape API, no keys and no internet. Everything runs on the laser PC.
+There's no Onshape API and no keys, and it runs without internet once installed. Everything runs on the laser PC.
 
 ## Installing it
 
-**Super simple steps are in [SCHOOL_SETUP.md](SCHOOL_SETUP.md).**
+**[One-click install](https://github.com/LILRINO71/laser-pipeline/releases/latest/download/Install-Laser-Station.bat):** on the laser PC, click that
+link and open the file. It downloads everything else. The same link updates it later and keeps your sheet map and settings.
 
-No USB stick with you? Download `LaserStation.zip` and `Install.Laser.Station.bat` from
-[Releases](https://github.com/LILRINO71/laser-pipeline/releases/latest), keep them in one folder, and double-click the `.bat`.
+Then follow the **super simple steps in [SCHOOL_SETUP.md](SCHOOL_SETUP.md)**.
 
 To rebuild the installer: `python tools/build_usb.py` (makes `dist/usb/`).
 
