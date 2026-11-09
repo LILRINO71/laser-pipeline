@@ -110,8 +110,10 @@ def setup_settings(printer: str, hwnd: int | None = None) -> bool:
     try:
         hwnd = hwnd or win32gui.GetDesktopWindow()
         r = win32print.DocumentProperties(hwnd, h, printer, dm, dm, win32con.DM_IN_PROMPT | win32con.DM_IN_BUFFER | win32con.DM_OUT_BUFFER)
-        if r != win32con.IDOK:
+        if r == win32con.IDCANCEL:
             return False
+        if r < 0:
+            raise RuntimeError(f"The laser's driver reported error {r}")
         _save_settings(printer, dm)
         return True
     finally:

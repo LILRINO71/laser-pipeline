@@ -44,7 +44,9 @@ class Station(tk.Tk):
         self.drag = None  # {"pl", "dx", "dy"} while a part is being dragged
         self.need_check = False
         self.busy = False
+        self.settings_stamp = None
         self._build_ui()
+        self._watch_settings()
         self.refresh_bed()
         self.bind("<Configure>", lambda e: self.after_idle(self.draw))
 
@@ -175,8 +177,10 @@ class Station(tk.Tk):
             self.driver_lbl.config(text="✗ NOT FOUND: pick the laser from this list", foreground=BAD)
             self.preset_lbl.config(text="", foreground="#555")
             return
-        if self._preset_problem():
-            self.preset_lbl.config(text="Laser settings: NOT SAVED", foreground=BAD)
+        problem = self._preset_problem()
+        if problem:
+            self.preset_lbl.config(text="Laser settings: NOT SAVED" if "haven't been saved" in problem else "Laser settings: save them again",
+                                   foreground=BAD)
         elif vls_print.preset_verified(self._printer()):
             self.preset_lbl.config(text="Laser settings: locked ✓", foreground="#1b7a3d")
         else:
@@ -218,9 +222,28 @@ class Station(tk.Tk):
             messagebox.showerror("Laser settings", f"The laser's settings window wouldn't open.\n\n{e}\n\nTake a photo of this and show it to Claude.")
             return
         self.refresh_driver()
-        if ok:
+        problem = vls_print.preset_problem(printer)
+        if not ok:
+            messagebox.showwarning("Nothing was saved", "The settings window closed without OK, so nothing was saved.\n\n"
+                                   "Click Laser settings… again and press OK at the end.")
+        elif problem:
+            messagebox.showerror("Not saved", f"{problem}\n\nTake a photo of this and show it to Claude.")
+        else:
             messagebox.showinfo("Saved", "Laser settings are saved and used for every job.\n\n"
                                 "The next job won't start by itself until you've checked them in UCP.")
+
+    def _watch_settings(self):
+        """Keep the label true if the settings get saved outside this window."""
+        from laserpipe import vls_print
+
+        try:
+            stamp = vls_print.SETTINGS_FILE.stat().st_mtime
+        except OSError:
+            stamp = None
+        if stamp != self.settings_stamp:
+            self.settings_stamp = stamp
+            self.refresh_driver()
+        self.after(1500, self._watch_settings)
 
     def mode_changed(self):
         engrave = self.mode.get() == "engrave"
