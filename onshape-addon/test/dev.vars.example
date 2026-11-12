@@ -1,0 +1,5 @@
+ONSHAPE_CLIENT_ID=test-client
+ONSHAPE_CLIENT_SECRET=test-secret
+STATION_KEY=test-station-key-0123456789abcdef
+OAUTH_BASE=http://localhost:8788
+API_HOST_PATTERN=^http://localhost:8788$

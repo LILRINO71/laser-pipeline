@@ -1,4 +1,4 @@
-# Laser Station: Onshape → VLS 4.60, no Illustrator, no API
+# Laser Station: Onshape → VLS 4.60, no Illustrator
 
 Any team exports their plates from Onshape, opens the file in **Laser Station** on the laser PC, checks
 where the parts land on the plywood that's already in the laser, answers one question, and it cuts.
@@ -11,7 +11,12 @@ Onshape: right-click Part Studio tab > Export > STEP      (or a face / drawing e
    ──▶ the cut parts are marked on the sheet map for the next team
 ```
 
-There's no Onshape API and no keys, and it runs without internet once installed. Everything runs on the laser PC.
+Two ways in:
+
+- **Onshape add-on (newest):** in the Part Studio, open the **Laser Station** panel, click the plate's **top face**, press
+  **Send to laser**. At the laser PC, click **Jobs sent from Onshape**. The face you clicked is the side facing up, so a part
+  never comes out flipped or mirrored. Setup: [onshape-addon/SETUP.md](onshape-addon/SETUP.md).
+- **Export a file:** no add-on, no internet. Export STEP or DXF and open it in Laser Station. The biggest flat face is the top.
 
 ## Installing it
 
@@ -54,6 +59,8 @@ finishes, swap the wood and press FIRE again.
 | DXF with no units | warning, assumes mm |
 | Job needs fresh wood | asks once that a new sheet is loaded before firing |
 | Laser settings never saved, or the driver changed | **blocked**, won't send |
+| Add-on: side face, curved face or whole part clicked | refused in the panel, with what to click instead |
+| Add-on: picked face not found in the file | note, and the biggest flat face is the top |
 | First job after saving settings | not started until someone confirms UCP shows the saved numbers |
 | Engrave only | every line is sent blue, so the job contains no cut-power line |
 
@@ -80,16 +87,19 @@ python laser.py --setup            (open the ULS driver's own settings and lock 
 | `auto_start` | true | press UCP's Start after sending |
 | `ucp_start_button` | auto | exact button name if auto-find misses it (see `ucp_controls.txt`) |
 | `test_pdf_dir` | null | set a folder to "print" to PDF instead of the laser (testing) |
+| `cloud_url` | null | the Onshape add-on's server; the station key goes in `config.local.json` as `station_key` |
 
 ## Files
 
 - `station.pyw`: the Laser Station window
 - `laser.py`: command line
-- `laserpipe/importers.py`: STEP (part names, thickness, pocket check) and DXF readers
+- `laserpipe/importers.py`: STEP (part names, thickness, pocket check, picked top face) and DXF readers
 - `laserpipe/geometry.py`: edges → outlines with holes, kerf, orientation
 - `laserpipe/nest.py`: packs parts around the used wood
 - `laserpipe/bed.py`: the shared sheet map + safety checks
 - `laserpipe/output.py`: labels, DXF, SVG, preview page
 - `laserpipe/vls_print.py`: hairline vector printing to the ULS driver
 - `laserpipe/ucp.py`: presses Start in UCP
+- `laserpipe/cloud.py`: jobs from the Onshape add-on
+- `onshape-addon/`: the Onshape panel + its small server (Cloudflare Worker), with a fake Onshape for tests
 - `SCHOOL_SETUP.md`: install + first-test steps for the laser PC

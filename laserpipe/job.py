@@ -37,12 +37,22 @@ class Job:
         self.too_big: list = []
         self.errors: dict[int, list[str]] = {}
         self.moves: dict[tuple, tuple] = {}  # (part name, copy) -> (sheet index, x, y, rotated), from dragging on the map
+        self.cloud_ids: list[str] = []  # Onshape add-on jobs in this job; cleared from the queue once cut
         self.name = f"{datetime.now():%Y%m%d-%H%M%S}"
 
     # ------------------------------------------------------------ input
-    def add_files(self, paths, dxf_units=None):
+    def add_files(self, paths, dxf_units=None, tops: dict | None = None):
+        """tops: {file path: {"normal", "origin"}} for parts whose top face was picked in Onshape."""
+        tops = {str(Path(k)): v for k, v in (tops or {}).items()}
         for p in map(Path, paths):
-            raws, warns = read_any(p, dxf_units)
+            raws, warns = read_any(p, dxf_units, tops.get(str(p)))
+            taken = {r["name"].lower() for r in self.raws}
+            for r in raws:  # two parts with the same name would share one row and one count
+                base, k = r["name"], 2
+                while r["name"].lower() in taken:
+                    r["name"] = f"{base} ({k})"
+                    k += 1
+                taken.add(r["name"].lower())
             self.files.append(p)
             self.raws += raws
             self.notes += warns

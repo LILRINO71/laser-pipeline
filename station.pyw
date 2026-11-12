@@ -22,6 +22,7 @@ from laserpipe.job import ROOT, Job, load_config
 PREFS = ROOT / "station_prefs.json"
 WOOD, USED, CUT, MARK, BAD = "#ecd9b4", "#9a9a9a", "#d01c1c", "#1f4fd8", "#b3261e"
 BG, CARD, INK, MUTED, LINE, HEAD, GREEN, FIRE, BTN = "#f3f1ec", "#ffffff", "#1f2328", "#6b7078", "#dcd8cf", "#1f2328", "#1b7a3d", "#c8321f", "#e9e5dc"
+ACCENT = "#1a6fd6"
 
 
 class Station(tk.Tk):
@@ -49,11 +50,16 @@ class Station(tk.Tk):
         self.loading = False
         self.start_failed = False
         self.draw_queued = False
+        self.cloud_jobs: list[dict] = []  # jobs waiting from the Onshape add-on
+        self.cloud_calls = 0
+        self.cloud_err = None
+        self.cloud_win = None
         self._build_ui()
         self._watch_settings()
         self.refresh_bed()
         self.bind("<Configure>", self._queue_draw)
         threading.Thread(target=self._warm_up, daemon=True).start()
+        self.after(400, self._poll_cloud)
 
     # ------------------------------------------------------------------ UI
     def _build_ui(self):
@@ -91,6 +97,7 @@ class Station(tk.Tk):
         button("Primary.TButton", INK, "#ffffff", "#3a4048", padding=(14, 7), font=("Segoe UI Semibold", 10))
         button("Save.TButton", GREEN, "#ffffff", "#156331", padding=(14, 7), font=("Segoe UI Semibold", 10))
         button("Fire.TButton", FIRE, "#ffffff", "#a42817", padding=(34, 15), font=("Segoe UI Semibold", 16))
+        button("Jobs.TButton", ACCENT, "#ffffff", "#155bb0", padding=(14, 7), font=("Segoe UI Semibold", 10))
         st.configure("Seg.Toolbutton", background=BTN, foreground=INK, padding=(14, 7), anchor="center", bordercolor=BTN, lightcolor=BTN, darkcolor=BTN)
         st.map("Seg.Toolbutton", background=[("selected", INK), ("active", "#dcd7cb")], foreground=[("selected", "#ffffff")],
                lightcolor=[("selected", INK)], darkcolor=[("selected", INK)], bordercolor=[("selected", INK)])
@@ -128,6 +135,8 @@ class Station(tk.Tk):
         ttk.Label(row, text="Team", style="Card.TLabel").pack(side="left")
         ttk.Entry(row, textvariable=self.team, width=14).pack(side="left", padx=(8, 12))
         ttk.Button(row, text="Open STEP / DXF…", style="Primary.TButton", command=self.open_files).pack(side="right")
+        self.jobs_btn = ttk.Button(job, text="Jobs sent from Onshape", command=self.open_cloud)
+        self.jobs_btn.pack(fill="x", pady=(10, 0))
         modes = ttk.Frame(job, style="Inner.TFrame")
         modes.pack(fill="x", pady=(12, 0))
         modes.columnconfigure((0, 1), weight=1, uniform="m")
@@ -702,6 +711,8 @@ class Station(tk.Tk):
             self.draw()
             self.status.config(text=f"{msg} Next: swap in fresh wood for sheet {left[0] + 1}, then FIRE.")
         else:
+            if j.cloud_ids:
+                threading.Thread(target=self._clear_cloud, args=(list(j.cloud_ids),), daemon=True).start()
             self.bed = Bed.load(*self.cfg["sheet_mm"])
             self.job = None
             self.tree.delete(*self.tree.get_children())
@@ -728,6 +739,175 @@ class Station(tk.Tk):
         else:
             messagebox.showwarning("Don't start this job", "Do NOT press START.\n\nDelete this job in UCP and click Undo last cut.\n\n"
                                    "Then tell Claude: \"presets don't stick\". Until that's fixed, the laser will never start by itself.")
+
+
+    # ------------------------------------------------------------------ jobs from the Onshape add-on
+    def _poll_cloud(self):
+        from laserpipe import cloud
+
+        if cloud.configured(self.cfg):
+            threading.Thread(target=self._fetch_cloud, daemon=True).start()
+        else:
+            self.jobs_btn.config(text="Jobs sent from Onshape (not connected)", style="TButton")
+        self.after(30000, self._poll_cloud)
+
+    def _fetch_cloud(self):
+        from laserpipe import cloud
+
+        try:
+            jobs, calls = cloud.list_jobs(self.cfg)
+            self.after(0, self._cloud_listed, jobs, calls, None)
+        except Exception as e:
+            self.after(0, self._cloud_listed, None, 0, str(e))
+
+    def _cloud_listed(self, jobs, calls, err):
+        self.cloud_err = err
+        if err:
+            self.jobs_btn.config(text="Jobs sent from Onshape (can't connect)", style="TButton")
+        else:
+            self.cloud_jobs, self.cloud_calls = jobs, calls
+            n = len(jobs)
+            self.jobs_btn.config(text=f"Jobs sent from Onshape: {n} waiting" if n else "Jobs sent from Onshape: none waiting",
+                                 style="Jobs.TButton" if n else "TButton")
+        if self.cloud_win and self.cloud_win.winfo_exists():
+            self._fill_cloud()
+
+    def _connect_cloud(self) -> bool:
+        from laserpipe import cloud
+
+        url = self.cfg.get("cloud_url")
+        if not url:
+            url = simpledialog.askstring("Connect to the Onshape add-on", "Add-on server address (starts with https://):", parent=self)
+            if not url:
+                return False
+        key = simpledialog.askstring("Connect to the Onshape add-on",
+                                     "Station key (from the person who set up the add-on).\nIt stays on this PC only:", show="•", parent=self)
+        if not key:
+            return False
+        self._save_local(cloud_url=url.strip(), station_key=key.strip())
+        try:
+            jobs, calls = cloud.list_jobs(self.cfg)
+        except Exception as e:
+            messagebox.showerror("Couldn't connect", str(e))
+            return False
+        self._cloud_listed(jobs, calls, None)
+        return True
+
+    def open_cloud(self):
+        from laserpipe import cloud
+
+        if not cloud.configured(self.cfg) and not self._connect_cloud():
+            return
+        if self.cloud_win and self.cloud_win.winfo_exists():
+            self.cloud_win.lift()
+            return
+        w = self.cloud_win = tk.Toplevel(self, background=CARD)
+        w.title("Jobs sent from Onshape")
+        w.geometry("640x380")
+        w.transient(self)
+        top = ttk.Frame(w, style="Inner.TFrame", padding=(14, 12, 14, 6))
+        top.pack(fill="x")
+        ttk.Label(top, text="Jobs sent from Onshape", style="H.TLabel").pack(side="left")
+        ttk.Label(top, text="Pick one team's parts, then Load.", style="Small.TLabel").pack(side="left", padx=10)
+        bot = ttk.Frame(w, style="Inner.TFrame", padding=14)
+        bot.pack(side="bottom", fill="x")
+        ttk.Button(bot, text="Load selected", style="Primary.TButton", command=self.load_cloud).pack(side="right")
+        ttk.Button(bot, text="Delete selected", command=self.delete_cloud).pack(side="right", padx=8)
+        ttk.Button(bot, text="Refresh", command=lambda: threading.Thread(target=self._fetch_cloud, daemon=True).start()).pack(side="right")
+        self.cloud_info = ttk.Label(bot, text="", style="Small.TLabel")
+        self.cloud_info.pack(side="left")
+        self.cloud_tree = ttk.Treeview(w, columns=("team", "part", "qty", "sent"), show="headings", selectmode="extended")
+        for c, t, wd in (("team", "Team", 110), ("part", "Part", 250), ("qty", "Qty", 50), ("sent", "Sent", 130)):
+            self.cloud_tree.heading(c, text=t, anchor="w")
+            self.cloud_tree.column(c, width=wd, anchor="w", stretch=c == "part")
+        self.cloud_tree.pack(fill="both", expand=True, padx=14)
+        self.cloud_tree.bind("<Double-1>", lambda _e: self.load_cloud())
+        self._fill_cloud()
+        threading.Thread(target=self._fetch_cloud, daemon=True).start()
+
+    def _fill_cloud(self):
+        t = self.cloud_tree
+        keep = set(t.selection())
+        t.delete(*t.get_children())
+        for j in self.cloud_jobs:
+            when = datetime.fromtimestamp(j.get("at", 0) / 1000)
+            sent = f"{when:%H:%M}" if when.date() == datetime.now().date() else f"{when:%a %d %b %H:%M}"
+            t.insert("", "end", iid=j["id"], values=(j.get("team", "?"), j.get("part", "?"), j.get("qty", 1), sent))
+        t.selection_set([i for i in keep if t.exists(i)])
+        if self.cloud_err:
+            self.cloud_info.config(text=f"Can't connect: {self.cloud_err}")
+        elif not self.cloud_jobs:
+            self.cloud_info.config(text="Nothing waiting. Teams send parts from the Laser Station panel in Onshape.")
+        else:
+            self.cloud_info.config(text=f"Onshape API calls this month: {self.cloud_calls}")
+
+    def load_cloud(self):
+        sel = [j for j in self.cloud_jobs if j["id"] in self.cloud_tree.selection()]
+        if not sel and len({j.get("team") for j in self.cloud_jobs}) == 1:
+            sel = list(self.cloud_jobs)  # nothing picked and only one team waiting: take it all
+        if not sel:
+            messagebox.showinfo("Pick a job", "Click a job in the list first (Ctrl+click picks several).", parent=self.cloud_win)
+            return
+        teams = {j.get("team") for j in sel}
+        if len(teams) > 1:
+            messagebox.showwarning("One team at a time", "Those jobs are from different teams. Load one team's parts at a time.",
+                                   parent=self.cloud_win)
+            return
+        if self.loading:
+            return
+        self.loading = True
+        self.status.config(text="Downloading from Onshape…")
+        self.cloud_win.destroy()
+        threading.Thread(target=self._read_cloud, args=(sel, teams.pop()), daemon=True).start()
+
+    def _read_cloud(self, sel, team):
+        from laserpipe import cloud
+
+        try:
+            job = Job(self.cfg, team)
+            qty = {}
+            for c in sel:
+                path = cloud.download(self.cfg, c)
+                before = len(job.raws)
+                job.add_files([path], tops={str(path): cloud.top_of(c)})
+                for r in job.raws[before:]:
+                    qty[r["name"]] = int(c.get("qty", 1))
+            job.cloud_ids = [c["id"] for c in sel]
+            self.after(0, self._cloud_read, job, qty, team, None)
+        except Exception as e:
+            self.after(0, self._cloud_read, None, None, team, e)
+
+    def _cloud_read(self, job, qty, team, err):
+        self.loading = False
+        if err:
+            self.status.config(text="Couldn't load the Onshape job.")
+            messagebox.showerror("Couldn't load the Onshape job", str(err))
+            return
+        self.team.set(team)
+        self.job = job
+        self.qty = qty
+        self.rebuild()
+        n = sum(qty.values())
+        self.status.config(text=f"Loaded {n} part{'s' if n != 1 else ''} for {team} from Onshape, top faces as picked there.")
+
+    def delete_cloud(self):
+        ids = list(self.cloud_tree.selection())
+        if not ids:
+            return
+        if not messagebox.askyesno("Delete jobs", f"Delete {len(ids)} job(s) from the Onshape queue?\n\nThe team would have to send them again.",
+                                   parent=self.cloud_win):
+            return
+        threading.Thread(target=self._clear_cloud, args=(ids,), daemon=True).start()
+
+    def _clear_cloud(self, ids):
+        from laserpipe import cloud
+
+        for i in ids:
+            try:
+                cloud.remove(self.cfg, i)
+            except Exception:
+                pass  # already gone, or offline: it expires by itself after 2 weeks
+        self._fetch_cloud()
 
 
 if __name__ == "__main__":

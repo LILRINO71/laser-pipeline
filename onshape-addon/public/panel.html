@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Laser Station</title>
+  <link rel="stylesheet" href="panel.css">
+</head>
+<body>
+  <header>
+    <h1>Laser Station</h1>
+    <p class="sub">Send a plate to the laser</p>
+  </header>
+
+  <section id="signin" hidden>
+    <p>Sign in once so the add-on can read this part.</p>
+    <button id="signin-btn" class="primary">Sign in with Onshape</button>
+  </section>
+
+  <main id="main" hidden>
+    <ol class="steps">
+      <li id="step-face" class="step">
+        <span class="num">1</span>
+        <div class="body">
+          <div class="label">Click the top face of the plate</div>
+          <div id="face-status" class="status muted">The side facing up on the laser. Engraving goes on this side.</div>
+        </div>
+      </li>
+      <li class="step">
+        <span class="num">2</span>
+        <div class="body">
+          <label class="label" for="team">Team</label>
+          <input id="team" maxlength="30" autocomplete="off" placeholder="e.g. 7831">
+          <label class="label" for="qty">How many</label>
+          <div class="qty">
+            <button type="button" id="minus" aria-label="One fewer">−</button>
+            <input id="qty" type="number" min="1" max="50" value="1" inputmode="numeric">
+            <button type="button" id="plus" aria-label="One more">+</button>
+          </div>
+        </div>
+      </li>
+    </ol>
+    <button id="send" class="primary big" disabled>Send to laser</button>
+    <div id="result" class="result" role="status" aria-live="polite"></div>
+  </main>
+
+  <footer>
+    <span id="foot-msg"></span>
+    <button id="signout" class="link" hidden>Sign out</button>
+  </footer>
+  <script src="panel.js"></script>
+</body>
+</html>

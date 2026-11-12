@@ -12,5 +12,6 @@
   "printer": null,
   "auto_start": true,
   "ucp_start_button": null,
-  "test_pdf_dir": null
+  "test_pdf_dir": null,
+  "cloud_url": null
 }

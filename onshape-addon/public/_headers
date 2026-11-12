@@ -1,0 +1,4 @@
+/panel.html
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors https://*.onshape.com http://localhost:8788
+  Referrer-Policy: same-origin
+  X-Content-Type-Options: nosniff

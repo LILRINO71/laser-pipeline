@@ -64,6 +64,14 @@ If it picks an older job, press **PAUSE**, then tell Claude "START ran the wrong
 
 ## Every day
 
+**With the Onshape add-on** (once it's set up, see `onshape-addon/SETUP.md`):
+
+1. In your Part Studio, click **Laser Station** on the right edge. Click the plate's **top face**. Type your team, then **Send to laser**.
+2. At the laser PC, open **Laser Station** and click the blue **Jobs sent from Onshape**. Pick your team's parts, then **Load selected**.
+3. Carry on from step 4 below.
+
+**Without it:**
+
 1. In Onshape, right-click your Part Studio tab, then **Export**, then **STEP**.
 2. Open **Laser Station** and type your team.
 3. Click **Open STEP / DXF** and pick your file.

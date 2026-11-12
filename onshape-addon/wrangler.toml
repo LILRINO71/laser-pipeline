@@ -1,0 +1,16 @@
+# Laser Station add-on. Setup steps: onshape-addon/SETUP.md
+name = "laser-station"
+main = "src/worker.js"
+compatibility_date = "2025-10-01"
+
+[assets]
+directory = "./public"
+html_handling = "none"  # keep /panel.html as is, so its security headers apply
+
+[vars]
+OAUTH_BASE = "https://oauth.onshape.com"
+API_HOST_PATTERN = '^https://([a-z0-9-]+\.)?onshape\.com$'
+
+[[kv_namespaces]]
+binding = "LASER"
+id = "REPLACE_WITH_KV_ID"

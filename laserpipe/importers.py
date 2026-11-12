@@ -1,7 +1,8 @@
-"""Read plates from files exported by hand from Onshape. No API anywhere.
+"""Read plates from STEP/DXF files: exported by hand from Onshape, or sent by the Onshape add-on.
 
 STEP  (best): right-click the Part Studio tab > Export > STEP. Every part comes in with its name,
               and the real 3D solid lets us measure thickness and catch pockets that aren't through.
+              The top is the face picked in the Onshape add-on, or else the biggest flat face.
 DXF / DWG-as-DXF: right-click a plate's face > Export as DXF, or a drawing exported as DXF.
               Closed loops are grouped into parts (outline + holes). Text, dimensions, open lines ignored.
 
@@ -76,17 +77,55 @@ def _step_named_solids(path: Path):
     return out
 
 
-def read_step(path: Path) -> list:
-    from build123d import GeomType, Plane, Solid
+def _pick_top(planes, top, notes, name):
+    """The face the student clicked in Onshape: same outward direction, and on the same plane when the
+    position matches. top = {"normal": [x, y, z], "origin": [x, y, z] in mm} in Part Studio coordinates."""
+    from build123d import Vector
 
+    n = Vector(*top["normal"]).normalized()
+    same = [f for f in planes if f.normal_at(f.center()).dot(n) > 0.9999]
+    if not same:
+        notes.append(f"{name}: couldn't find the face picked in Onshape, so the biggest flat face is the top")
+        return None
+    if top.get("origin") is not None:
+        o = Vector(*top["origin"])
+        on = [f for f in same if abs((f.center() - o).dot(n)) < 0.05]
+        if on:
+            return max(on, key=lambda f: f.area)
+    return max(same, key=lambda f: f.area)
+
+
+def _top_plane(face):
+    """Plane on the face, looking down onto it from outside, so the drawing is the top view (never mirrored)."""
+    from build123d import Plane
+
+    pl = Plane(face)
+    nrm = face.normal_at(face.center())
+    if pl.z_dir.dot(nrm) < 0:
+        pl = Plane(origin=pl.origin, x_dir=pl.x_dir, z_dir=nrm)
+    return pl
+
+
+def read_step(path: Path, top: dict | None = None, notes: list | None = None) -> list:
+    from build123d import GeomType, Solid
+
+    notes = notes if notes is not None else []
     raws = []
     for n, (name, occ_solid) in enumerate(_step_named_solids(path)):
         solid = Solid(occ_solid)
         planes = [f for f in solid.faces() if f.geom_type == GeomType.PLANE]
         if not planes:
             continue
-        face = max(planes, key=lambda f: f.area)
-        pl = Plane(face)
+        top_face = _pick_top(planes, top, notes, name or path.stem) if top else None
+        chosen = top_face is not None
+        if chosen:
+            # the picked face only says which side is up; the outline comes from the biggest face parallel
+            # to it, so a pocket on the picked side isn't read as a hole to cut through
+            nrm = top_face.normal_at(top_face.center())
+            face = max((f for f in planes if abs(f.normal_at(f.center()).dot(nrm)) > 0.9999), key=lambda f: f.area)
+        else:
+            face = top_face = max(planes, key=lambda f: f.area)
+        pl = _top_plane(top_face)
         loc = pl.to_local_coords(solid).bounding_box()
         thk = loc.max.Z - loc.min.Z
         edges = []
@@ -103,7 +142,7 @@ def read_step(path: Path) -> list:
                 rec.update(t="C", c=[c.X, c.Y], r=e.radius)
             edges.append(rec)
         raws.append({"name": name or f"{path.stem} {n + 1}", "thk": thk, "area": face.area,
-                     "volume": solid.volume, "edges": edges, "source": path.name})
+                     "volume": solid.volume, "edges": edges, "source": path.name, "top_picked": chosen})
     return raws
 
 
@@ -181,10 +220,11 @@ def read_dxf(path: Path, units: str | None = None) -> tuple[list, list]:
     return raws, warns
 
 
-def read_any(path: Path, dxf_units: str | None = None) -> tuple[list, list]:
+def read_any(path: Path, dxf_units: str | None = None, top: dict | None = None) -> tuple[list, list]:
     ext = path.suffix.lower()
     if ext in (".step", ".stp"):
-        return read_step(path), []
+        notes = []
+        return read_step(path, top, notes), notes
     if ext == ".dxf":
         return read_dxf(path, dxf_units)
     raise ValueError(f"{path.name}: use a .step or .dxf file (Onshape: right-click the tab > Export > STEP)")
