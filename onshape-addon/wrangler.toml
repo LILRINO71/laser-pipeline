@@ -13,4 +13,4 @@ API_HOST_PATTERN = '^https://([a-z0-9-]+\.)?onshape\.com$'
 
 [[kv_namespaces]]
 binding = "LASER"
-id = "REPLACE_WITH_KV_ID"
+id = "1f5cf1268bbe4513a16ab9a6988cb5d0"

@@ -15,12 +15,9 @@ You do this once. Steps 1 and 2 are on your home PC with Claude. Step 3 needs th
 
 ## 1. Server (Cloudflare, free)
 
-1. Make a free account at **https://dash.cloudflare.com/sign-up**.
-2. Tell Claude: **"Cloudflare account made"**. Claude runs the setup on your home PC:
-   - `npx wrangler login` opens your browser. Click **Allow**.
-   - Claude creates the job storage, makes the station key, and puts the server online.
-3. You get the server's address, like `https://laser-station.YOURNAME.workers.dev`.
-   In the steps below, **ADDRESS** means that address.
+**Done (2026-11-18).** The server is online at **https://laser-station.hiheollo43.workers.dev** on the same Cloudflare
+account as the SimBench site. Job storage: KV namespace `LASER`. The station key is in `onshape-addon/station-key.txt`
+on the home PC (never in GitHub). To update the server later: `cd onshape-addon`, then `npx wrangler deploy`.
 
 ## 2. Onshape app (test on your own account first)
 
@@ -31,8 +28,8 @@ You do this once. Steps 1 and 2 are on your home PC with Claude. Step 3 needs th
    | Name | `Laser Station` |
    | Primary format | `com.lilrino71.laserstation` |
    | Summary | `Send a plate to the school laser` |
-   | Redirect URLs | `ADDRESS/oauth/callback` |
-   | OAuth URL | `ADDRESS/panel.html` |
+   | Redirect URLs | `https://laser-station.hiheollo43.workers.dev/oauth/callback` |
+   | OAuth URL | `https://laser-station.hiheollo43.workers.dev/panel.html` |
    | Permissions | only **Application can read your documents** |
 
 2. Onshape shows the **OAuth secret only once**. Copy the **client identifier** and the **secret** into the file
@@ -45,7 +42,7 @@ You do this once. Steps 1 and 2 are on your home PC with Claude. Step 3 needs th
    | Name | `Laser Station` |
    | Location | **Element right panel** |
    | Context | **Inside part studio** |
-   | Action URL | `ADDRESS/panel.html?documentId={$documentId}&wv={$workspaceOrVersion}&wvid={$workspaceOrVersionId}&elementId={$elementId}&configuration={$configuration}` |
+   | Action URL | `https://laser-station.hiheollo43.workers.dev/panel.html?documentId={$documentId}&wv={$workspaceOrVersion}&wvid={$workspaceOrVersionId}&elementId={$elementId}&configuration={$configuration}` |
    | Icon | optional |
 
 4. Open **Store entries**, create an entry for the app and keep it private. Then **Subscribe** to it yourself.
@@ -69,7 +66,7 @@ Students' Onshape accounts are the district's, so the district has to allow the 
 ## 4. Laser PC
 
 1. Update Laser Station with the same install link as always.
-2. Click **Jobs sent from Onshape**. The first time, it asks for the **station key**. It's in
+2. Click **Jobs sent from Onshape**. The first time, it asks for the **station key** (the server address is built in). It's in
    `onshape-addon/station-key.txt` on the home PC. Type it in once. It stays only on that PC.
 3. The button turns **blue** when jobs are waiting. Click it, pick one team's parts, then **Load selected**.
    Check the map, then **FIRE**. Once the last sheet is sent, those jobs leave the list.
