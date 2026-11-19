@@ -22,8 +22,11 @@ const plane = (n, o) => ({ type: "PLANE", normal: { x: n[0], y: n[1], z: n[2] },
 const BODY = {
   id: "JHD", type: "SOLID", properties: { name: "Test L Plate" },
   faces: [
-    { id: "JHO", area: 0.0028, surface: plane([0, 0, 1], [0, 0, 0.006]), box: box([0, 0, 0.006], [0.1, 0.06, 0.006]) },
-    { id: "JHK", area: 0.0028, surface: plane([0, 0, 1], [0, 0, 0]), box: box([0, 0, 0], [0.1, 0.06, 0]) },
+    // like real Onshape: both big faces share the plane normal, "orientation" says which way is out of the part
+    { id: "JHO", area: 0.0028, orientation: true, surface: plane([0, 0, 1], [0, 0, 0.006]), box: box([0, 0, 0.006], [0.1, 0.06, 0.006]) },
+    { id: "JHK", area: 0.0028, orientation: false, surface: plane([0, 0, 1], [0, 0, 0]), box: box([0, 0, 0], [0.1, 0.06, 0]) },
+    // no orientation flag: the server falls back to "away from the middle of the part"
+    { id: "JHB", area: 0.0028, surface: plane([0, 0, 1], [0, 0, 0]), box: box([0, 0, 0], [0.1, 0.06, 0]) },
     { id: "JHS", area: 0.00012, surface: plane([1, 0, 0], [0.1, 0, 0]), box: box([0.1, 0, 0], [0.1, 0.02, 0.006]) },
     { id: "JHC", area: 0.00015, surface: { type: "CYLINDER", origin: { x: 0.085, y: 0.01, z: 0 } }, box: box([0.081, 0.006, 0], [0.089, 0.014, 0.006]) },
   ],

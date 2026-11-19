@@ -251,11 +251,15 @@ function describeFace(details, faceId) {
     const bl = Math.hypot(...bn);
     if (bl && Math.abs(dot(n, bn)) / bl < 0.9999)
       throw new HttpError(400, "That's a side face. Click the big flat face on top of the plate.");
-    // Outward check that doesn't depend on Onshape's sign conventions: "up" points away from the middle of the part.
+    // Onshape gives both big faces of a plate the same plane normal; the face's orientation flag says whether
+    // "out of the part" is along it (true) or against it (false). Checked on real Robot V2 plates.
     const fc = mid(f.box) || o;
     const corners = (body.faces || []).flatMap((x) => (x.box && x.box.minCorner ? [vec(x.box.minCorner), vec(x.box.maxCorner)] : []));
     const pts = corners.length ? corners : (body.vertices || []).map((v) => vec(v.point));
-    if (pts.length) {
+    if (typeof f.orientation === "boolean") {
+      if (!f.orientation) n = n.map((v) => -v);
+    } else if (pts.length) {
+      // no flag: "up" points away from the middle of the part
       const c = pts.reduce((a, p) => a.map((v, i) => v + p[i] / pts.length), [0, 0, 0]);
       if (dot(n, sub(fc, c)) < 0) n = n.map((v) => -v);
     }
