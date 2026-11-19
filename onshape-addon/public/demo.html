@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Laser Station Demo</title>
+  <meta name="description" content="Click a plate's top face, send it to the laser: a hands-on demo of the Laser Station Onshape add-on.">
+  <link rel="stylesheet" href="demo.css">
+  <script type="importmap">
+    { "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    } }
+  </script>
+</head>
+<body>
+  <header class="top">
+    <div>
+      <h1>Laser Station <span class="tag">Demo</span></h1>
+      <p>From a Part Studio to the school laser in one click. This page stands in for the Part Studio; the Laser Station panel is the real add-on panel, in demo mode, so nothing is sent anywhere.</p>
+    </div>
+    <ol class="flow" aria-label="Steps">
+      <li id="s1" class="on"><b>1</b> Click the plate's top face</li>
+      <li id="s2"><b>2</b> Team, then Send to laser</li>
+      <li id="s3"><b>3</b> Load it at the laser PC</li>
+    </ol>
+  </header>
+
+  <main class="stage">
+    <section class="studio" aria-label="Part Studio (demo)">
+      <div class="studio-bar">
+        <span class="doc">Robot V2 · Frame Plates</span>
+        <span class="part">Side Plate -Y · 6.35 mm plywood</span>
+      </div>
+      <div id="view" class="view">
+        <div id="hint" class="hint">Click the <b>top face</b> of the plate. Drag to turn it, scroll to zoom.</div>
+        <div id="bubble" class="bubble" hidden></div>
+      </div>
+      <div class="legend">
+        <span><i class="sw top"></i>flat faces (click the one facing up)</span>
+        <span><i class="sw side"></i>edges and holes (refused)</span>
+        <button id="flip" type="button">Flip the plate over</button>
+      </div>
+    </section>
+    <aside class="panel-wrap" aria-label="Laser Station panel">
+      <iframe id="panel" title="Laser Station panel"
+        src="panel.html?demo=1&documentId=4e51f14dbbbd661a67d106d1&wv=w&wvid=6f5fa0bb89cb87deea710305&elementId=a7b60dc0793aa610c8b78425&configuration="></iframe>
+    </aside>
+  </main>
+
+  <section id="next" class="next" hidden>
+    <h2>Step 3, at the laser PC</h2>
+    <ol>
+      <li>Open <b>Laser Station</b>. The blue button says <b>Jobs sent from Onshape: 1 waiting</b>.</li>
+      <li>Click it, then <b>Load selected</b>. The plate lands on the map of the wood already in the laser, with the face you clicked facing up.</li>
+      <li>Check the layout (drag a part to move it), then <b>FIRE</b>. Laser Station sends the job to the laser and presses Start.</li>
+    </ol>
+    <p class="muted">Try it without a laser: install Laser Station and open the <b>Laser Station DEMO</b> icon. FIRE saves the laser file as a PDF and shows the laser cutting on screen.</p>
+  </section>
+
+  <footer class="foot">
+    <a href="https://github.com/LILRINO71/laser-pipeline">Source on GitHub</a>
+    <span>Part: Side Plate -Y from the team's public Robot V2 Onshape document.</span>
+  </footer>
+  <script type="module" src="demo.js"></script>
+</body>
+</html>

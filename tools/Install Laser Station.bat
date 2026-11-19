@@ -68,6 +68,7 @@ set "LINKDIR=%PUBLIC%\Desktop"
 if defined TESTMODE set "LINKDIR=%TARGET%"
 powershell -NoProfile -Command "$s=(New-Object -ComObject WScript.Shell).CreateShortcut('%LINKDIR%\Laser Station.lnk'); $s.TargetPath='%TARGET%\python\pythonw.exe'; $s.Arguments='-E -s station.pyw'; $s.WorkingDirectory='%TARGET%'; $s.Description='Laser Station'; $s.Save()"
 if errorlevel 1 echo WARNING: couldn't make the desktop icon. Use "Laser Station.bat" in %TARGET%.
+powershell -NoProfile -Command "$s=(New-Object -ComObject WScript.Shell).CreateShortcut('%LINKDIR%\Laser Station DEMO.lnk'); $s.TargetPath='%TARGET%\python\pythonw.exe'; $s.Arguments='-E -s station.pyw --demo'; $s.WorkingDirectory='%TARGET%'; $s.Description='Laser Station demo (no laser needed)'; $s.Save()" >nul 2>&1
 
 echo.
 echo ============================================================

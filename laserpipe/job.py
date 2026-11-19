@@ -38,6 +38,7 @@ class Job:
         self.errors: dict[int, list[str]] = {}
         self.moves: dict[tuple, tuple] = {}  # (part name, copy) -> (sheet index, x, y, rotated), from dragging on the map
         self.cloud_ids: list[str] = []  # Onshape add-on jobs in this job; cleared from the queue once cut
+        self.cloud_parts: dict[str, list[str]] = {}  # add-on job id -> part names it brought in
         self.name = f"{datetime.now():%Y%m%d-%H%M%S}"
 
     # ------------------------------------------------------------ input

@@ -18,6 +18,14 @@ Two ways in:
   never comes out flipped or mirrored. Setup: [onshape-addon/SETUP.md](onshape-addon/SETUP.md).
 - **Export a file:** no add-on, no internet. Export STEP or DXF and open it in Laser Station. The biggest flat face is the top.
 
+## Try it without a laser
+
+- **Web demo (any browser):** https://laser-station.hiheollo43.workers.dev/demo.html shows the real Robot V2 side plate in 3D and the
+  add-on panel. Click the top face and send it. Nothing is really sent.
+- **Laser Station DEMO** (desktop icon after installing): three jobs "sent from Onshape" with real Robot V2 plates. FIRE saves the laser
+  file as a PDF and shows the laser cutting on screen. It has its own sheet map, so the real one is never touched.
+- A 5-minute walkthrough for showing someone: [DEMO.md](DEMO.md).
+
 ## Installing it
 
 **[One-click install](https://github.com/LILRINO71/laser-pipeline/releases/latest/download/Install-Laser-Station.bat):** on the laser PC, click that
@@ -103,3 +111,5 @@ python laser.py --setup            (open the ULS driver's own settings and lock 
 - `laserpipe/cloud.py`: jobs from the Onshape add-on
 - `onshape-addon/`: the Onshape panel + its small server (Cloudflare Worker), with a fake Onshape for tests
 - `SCHOOL_SETUP.md`: install + first-test steps for the laser PC
+- `DEMO.md`: showing it without a laser (`Laser Station Demo.bat`, `samples/demo/`)
+- `tests/`: demo and Onshape-jobs tests (`python tests/test_demo.py`)

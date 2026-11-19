@@ -1,0 +1,8 @@
+{
+  "_help": "Demo-only 'Jobs sent from Onshape'. Real parts from the team's public Robot V2 Onshape doc. top = the face a student clicked (mm, Part Studio coordinates).",
+  "jobs": [
+    {"id": "demo-1", "team": "7831", "part": "Side Plate +Y", "qty": 1, "file": "side-plate-plus-y.step", "top": {"normal": [0, 1, 0], "origin": [65.5965, 60, 226.8915]}, "minutes_ago": 12},
+    {"id": "demo-2", "team": "7831", "part": "Side Plate -Y", "qty": 1, "file": "side-plate-minus-y.step", "top": {"normal": [0, 1, 0], "origin": [65.5965, -53.65, 226.8915]}, "minutes_ago": 11},
+    {"id": "demo-3", "team": "7831", "part": "Hub Deck", "qty": 1, "file": "hub-deck.step", "top": {"normal": [0, 0, 1], "origin": [-108, 0, 79.175]}, "minutes_ago": 9}
+  ]
+}

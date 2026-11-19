@@ -70,3 +70,38 @@ def top_of(job: dict) -> dict | None:
     if isinstance(n, list) and len(n) == 3 and all(isinstance(v, (int, float)) for v in n):
         return {"normal": n, "origin": o if isinstance(o, list) and len(o) == 3 else None}
     return None
+
+
+# ----------------------------------------------------------------------------- demo (no internet, no Onshape)
+DEMO_DIR = ROOT / "samples" / "demo"
+DEMO_DONE = ROOT / "jobs" / "demo" / "done_jobs.json"
+
+
+def _demo_done() -> list:
+    try:
+        return json.loads(DEMO_DONE.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+
+def demo_list() -> tuple[list[dict], int]:
+    import time
+
+    d = json.loads((DEMO_DIR / "jobs.json").read_text(encoding="utf-8"))
+    done = set(_demo_done())
+    now = time.time() * 1000
+    jobs = [{**j, "at": now - j.get("minutes_ago", 5) * 60000} for j in d["jobs"] if j["id"] not in done]
+    return jobs, 5 * len(d["jobs"])  # what the real sends would have cost
+
+
+def demo_download(job: dict) -> Path:
+    return DEMO_DIR / job["file"]
+
+
+def demo_remove(job_id: str) -> None:
+    DEMO_DONE.parent.mkdir(parents=True, exist_ok=True)
+    DEMO_DONE.write_text(json.dumps(sorted(set(_demo_done()) | {job_id})), encoding="utf-8")
+
+
+def demo_reset() -> None:
+    DEMO_DONE.unlink(missing_ok=True)

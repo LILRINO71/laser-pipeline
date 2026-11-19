@@ -7,6 +7,7 @@ Double-click "Laser Station.bat" (or this file).
 from __future__ import annotations
 
 import json
+import sys
 import threading
 import tkinter as tk
 import traceback
@@ -16,8 +17,16 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from shapely.geometry import Point
 
+from laserpipe import bed as bed_mod
+from laserpipe import job as job_mod
 from laserpipe.bed import Bed
 from laserpipe.job import ROOT, Job, load_config
+
+DEMO = "--demo" in sys.argv  # no laser: FIRE makes the laser file (PDF) and shows the cut on screen
+DEMO_DIR = ROOT / "jobs" / "demo"
+if DEMO:
+    bed_mod.STATE = DEMO_DIR / "sheet_state.json"
+    job_mod.HISTORY = DEMO_DIR / "history.json"
 
 PREFS = ROOT / "station_prefs.json"
 WOOD, USED, CUT, MARK, BAD = "#ecd9b4", "#9a9a9a", "#d01c1c", "#1f4fd8", "#b3261e"
@@ -29,7 +38,10 @@ class Station(tk.Tk):
     def __init__(self):
         super().__init__()
         self.cfg = load_config()
-        self.title("Laser Station · VLS 4.60")
+        if DEMO:
+            DEMO_DIR.mkdir(parents=True, exist_ok=True)
+            self.cfg.update(test_pdf_dir=str(DEMO_DIR / "laser files"), auto_start=False)
+        self.title("Laser Station · DEMO (no laser)" if DEMO else "Laser Station · VLS 4.60")
         self.geometry("1280x820")
         self.minsize(1040, 660)
         self.bed = Bed.load(*self.cfg["sheet_mm"])
@@ -108,6 +120,11 @@ class Station(tk.Tk):
         tk.Label(head, text="VLS 4.60", background=HEAD, foreground="#a8adb3", font=("Segoe UI", 10)).pack(side="left", pady=(6, 0))
         self.bed_lbl = tk.Label(head, text="", background=HEAD, foreground="#d7d9dc", font=("Segoe UI", 10))
         self.bed_lbl.pack(side="right", padx=20)
+        if DEMO:
+            tk.Label(head, text="  DEMO: no laser connected  ", background="#f2b705", foreground=HEAD,
+                     font=("Segoe UI Semibold", 10)).pack(side="left", padx=14, pady=(4, 0))
+            tk.Button(head, text="Reset demo", command=self.reset_demo, relief="flat", background="#3a4048", foreground="#ffffff",
+                      activebackground="#4a515a", activeforeground="#ffffff", font=("Segoe UI", 9), padx=10).pack(side="right")
 
         laser = ttk.Frame(self, padding=(20, 12, 20, 10))
         laser.pack(fill="x")
@@ -237,6 +254,11 @@ class Station(tk.Tk):
         from laserpipe import vls_print
 
         self.printer_box["values"] = [p for p, _ in vls_print.printer_list()]
+        if DEMO:
+            self.printer.set("Microsoft Print to PDF")
+            self.driver_lbl.config(text="Demo: the laser file is saved as a PDF instead", foreground="#8a5a00")
+            self.preset_lbl.config(text="Power/speed presets: shown, not used", foreground="#555")
+            return
         if self.cfg.get("test_pdf_dir"):
             self.printer.set("Microsoft Print to PDF")
             self.driver_lbl.config(text="Test mode: nothing goes to the laser", foreground="#555")
@@ -477,6 +499,8 @@ class Station(tk.Tk):
 
     # ------------------------------------------------------------------ drawing
     def draw(self):
+        if getattr(self, "animating", False):
+            return  # the demo laser is drawing on the map; a redraw would wipe it
         c = self.canvas
         c.delete("all")
         W, H = max(c.winfo_width(), 50), max(c.winfo_height(), 50)
@@ -498,7 +522,7 @@ class Station(tk.Tk):
         for mm in range(100, int(bh), 100):
             c.create_line(ox, oy + mm * k, ox + bw * k, oy + mm * k, fill="#e2cfa6")
         c.create_text(ox + 4, oy + 4, text="top-left corner of the bed", anchor="nw", fill="#8b7a5a", font=("Segoe UI", 8))
-        if not self.job:
+        if not self.job and not self.bed.used:
             c.create_text(ox + bw * k / 2, oy + bh * k / 2, text="Open a STEP or DXF file to place your parts", fill="#8b7a5a", font=("Segoe UI", 13))
         if sheet is None or not sheet.needs_new_wood:
             for u in self.bed.used_shapes():
@@ -659,7 +683,8 @@ class Station(tk.Tk):
             printer = vls_print.find_laser_printer("Microsoft Print to PDF" if test_pdf else self.cfg.get("printer"))
             dup = j.duplicate_of()
             j.send(i, printer, Path(test_pdf) if test_pdf else None)
-            j.record(self.bed, i)
+            if not DEMO:  # the demo marks the wood after the cut has been shown
+                j.record(self.bed, i)
             msg = f"Sheet {i + 1} sent." + (f" The same parts were also sent by {dup}." if dup else "")
             self.need_check = not test_pdf and not vls_print.preset_verified(printer)
             self.start_failed = False
@@ -692,7 +717,16 @@ class Station(tk.Tk):
                                "Show Laser Station where START is, so next time it's one click?"):
             self.teach_start()
 
-    def _sent(self, i, msg, err):
+    def _sent(self, i, msg, err, shown=False):
+        if DEMO and not err and not shown:
+            msg = f"Demo: sheet {i + 1} saved as the laser file in jobs\\demo\\laser files. Nothing went to a laser."
+
+            def finished():
+                self.job.record(self.bed, i)  # the wood counts as used once the cut has been shown
+                self._sent(i, msg, None, shown=True)
+
+            self._animate_cut(i, finished)
+            return
         self.busy = False
         self.fire_btn.state(["!disabled"])
         if err:
@@ -711,8 +745,11 @@ class Station(tk.Tk):
             self.draw()
             self.status.config(text=f"{msg} Next: swap in fresh wood for sheet {left[0] + 1}, then FIRE.")
         else:
-            if j.cloud_ids:
-                threading.Thread(target=self._clear_cloud, args=(list(j.cloud_ids),), daemon=True).start()
+            # only jobs whose parts were all cut leave the list (a skipped or set-to-0 part stays for the team)
+            cut = {pl.part.name for s in j.sheets for pl in s.placements}
+            done = [cid for cid in j.cloud_ids if j.cloud_parts.get(cid) and all(n in cut for n in j.cloud_parts[cid])]
+            if done:
+                threading.Thread(target=self._clear_cloud, args=(done,), daemon=True).start()
             self.bed = Bed.load(*self.cfg["sheet_mm"])
             self.job = None
             self.tree.delete(*self.tree.get_children())
@@ -745,7 +782,7 @@ class Station(tk.Tk):
     def _poll_cloud(self):
         from laserpipe import cloud
 
-        if cloud.configured(self.cfg):
+        if DEMO or cloud.configured(self.cfg):
             threading.Thread(target=self._fetch_cloud, daemon=True).start()
         else:
             self.jobs_btn.config(text="Jobs sent from Onshape (not connected)", style="TButton")
@@ -755,7 +792,7 @@ class Station(tk.Tk):
         from laserpipe import cloud
 
         try:
-            jobs, calls = cloud.list_jobs(self.cfg)
+            jobs, calls = cloud.demo_list() if DEMO else cloud.list_jobs(self.cfg)
             self.after(0, self._cloud_listed, jobs, calls, None)
         except Exception as e:
             self.after(0, self._cloud_listed, None, 0, str(e))
@@ -796,7 +833,7 @@ class Station(tk.Tk):
     def open_cloud(self):
         from laserpipe import cloud
 
-        if not cloud.configured(self.cfg) and not self._connect_cloud():
+        if not DEMO and not cloud.configured(self.cfg) and not self._connect_cloud():
             return
         if self.cloud_win and self.cloud_win.winfo_exists():
             self.cloud_win.lift()
@@ -838,6 +875,8 @@ class Station(tk.Tk):
             self.cloud_info.config(text=f"Can't connect: {self.cloud_err}")
         elif not self.cloud_jobs:
             self.cloud_info.config(text="Nothing waiting. Teams send parts from the Laser Station panel in Onshape.")
+        elif DEMO:
+            self.cloud_info.config(text="Demo: real plates from the team's Robot V2 Onshape doc")
         else:
             self.cloud_info.config(text=f"Onshape API calls this month: {self.cloud_calls}")
 
@@ -867,11 +906,12 @@ class Station(tk.Tk):
             job = Job(self.cfg, team)
             qty = {}
             for c in sel:
-                path = cloud.download(self.cfg, c)
+                path = cloud.demo_download(c) if DEMO else cloud.download(self.cfg, c)
                 before = len(job.raws)
                 job.add_files([path], tops={str(path): cloud.top_of(c)})
                 for r in job.raws[before:]:
                     qty[r["name"]] = int(c.get("qty", 1))
+                job.cloud_parts[c["id"]] = [r["name"] for r in job.raws[before:]]
             job.cloud_ids = [c["id"] for c in sel]
             self.after(0, self._cloud_read, job, qty, team, None)
         except Exception as e:
@@ -904,10 +944,89 @@ class Station(tk.Tk):
 
         for i in ids:
             try:
-                cloud.remove(self.cfg, i)
+                cloud.demo_remove(i) if DEMO else cloud.remove(self.cfg, i)
             except Exception:
                 pass  # already gone, or offline: it expires by itself after 2 weeks
         self._fetch_cloud()
+
+
+    # ------------------------------------------------------------------ demo
+    def _animate_cut(self, i, done):
+        """Draw the laser head following the job's real paths: engraving (blue) first, then holes, then outlines."""
+        from laserpipe import output
+
+        j = self.job
+        ox, oy, k, bh = self.xf  # the map as it is on screen now (the parts aren't greyed out yet)
+        cuts, marks = j.paths(j.sheets[i])
+        runs = [(lp + lp[:1], MARK) for lp in marks] + [(lp + lp[:1], CUT) for lp in cuts]
+        segs = []
+        for pts, col in runs:
+            xy = [(ox + x * k, oy + (bh - y) * k) for x, y in pts]
+            for a, b in zip(xy, xy[1:]):
+                segs.append((a, b, col, ((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2) ** 0.5))
+        total = sum(sg[3] for sg in segs) or 1.0
+        metres = output.cut_length(cuts) / 1000
+        frames = max(120, min(420, int(total / 3)))  # 4 to 14 seconds, whatever the job size
+        step = total / frames
+        c = self.canvas
+        head = c.create_oval(0, 0, 0, 0, fill="#fff3a0", outline="#ffb000", width=2)
+        glow = c.create_oval(0, 0, 0, 0, outline="#ffd75e", width=1)
+        state = {"seg": 0, "into": 0.0}
+
+        def tick():
+            left = step
+            while left > 0 and state["seg"] < len(segs):
+                a, b, col, ln = segs[state["seg"]]
+                take = min(left, ln - state["into"])
+                t0, t1 = state["into"] / ln if ln else 1, (state["into"] + take) / ln if ln else 1
+                p0 = (a[0] + (b[0] - a[0]) * t0, a[1] + (b[1] - a[1]) * t0)
+                p1 = (a[0] + (b[0] - a[0]) * t1, a[1] + (b[1] - a[1]) * t1)
+                c.create_line(*p0, *p1, fill="#5a2a0c" if col == CUT else "#2b3f8f", width=2.6, capstyle="round")
+                state["into"] += take
+                left -= take
+                if state["into"] >= ln - 1e-9:
+                    state["seg"] += 1
+                    state["into"] = 0.0
+            if state["seg"] < len(segs):
+                a, b, _, ln = segs[state["seg"]]
+                t = state["into"] / ln if ln else 0
+                x, y = a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t
+                c.coords(head, x - 4, y - 4, x + 4, y + 4)
+                c.coords(glow, x - 9, y - 9, x + 9, y + 9)
+                c.tag_raise(glow)
+                c.tag_raise(head)
+                done_mm = sum(sg[3] for sg in segs[: state["seg"]]) + state["into"]
+                self.status.config(text=f"Demo: laser cutting… {100 * done_mm / total:.0f}%   ·   {metres:.2f} m of cuts on this sheet")
+                self.after(33, tick)
+            else:
+                c.delete(head)
+                c.delete(glow)
+
+                def end():
+                    self.animating = False
+                    done()
+
+                self.after(600, end)
+
+        self.animating = True
+        self.status.config(text="Demo: laser starting…")
+        self.after(400, tick)
+
+    def reset_demo(self):
+        from laserpipe import cloud
+
+        if self.busy:
+            return
+        cloud.demo_reset()
+        self.bed.new_sheet()
+        self.job = None
+        self.qty = {}
+        self.tree.delete(*self.tree.get_children())
+        self.msgs.delete("1.0", "end")
+        self.mode.set("cut")
+        self.status.config(text="Demo reset: fresh wood, and the Onshape jobs are back in the list.")
+        self.refresh_bed()
+        threading.Thread(target=self._fetch_cloud, daemon=True).start()
 
 
 if __name__ == "__main__":

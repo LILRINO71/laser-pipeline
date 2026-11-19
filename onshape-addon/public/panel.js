@@ -29,7 +29,28 @@ function randomHex(n) {
   return [...a].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+// Demo (panel.html?demo=1 inside demo.html): no sign-in, no server, no Onshape. Answers come from this table.
+const DEMO = q.get("demo") === "1";
+const DEMO_FACES = {
+  DEMO_TOP: { partName: "Side Plate -Y", partId: "JMD", normal: [0, 1, 0], origin: [65.6, -53.65, 226.89], approxThicknessMm: 6.35 },
+  DEMO_BOTTOM: { partName: "Side Plate -Y", partId: "JMD", normal: [0, -1, 0], origin: [65.6, -60, 226.89], approxThicknessMm: 6.35 },
+};
+let demoSent = 0;
+
+function demoApi(path, body) {
+  return new Promise((resolve, reject) => setTimeout(() => {
+    if (path === "/api/face") {
+      if (body.faceId === "DEMO_SIDE") return reject(new Error("That's a side face. Click the big flat face on top of the plate."));
+      if (body.faceId === "DEMO_CURVED") return reject(new Error("That face isn't flat. Click the flat top of the plate."));
+      return DEMO_FACES[body.faceId] ? resolve(DEMO_FACES[body.faceId]) : reject(new Error("Click a face of the plate."));
+    }
+    if (path === "/api/send") return resolve({ ok: true, waiting: ++demoSent });
+    resolve({ ok: true, signedIn: true });
+  }, path === "/api/send" ? 1600 : 250));
+}
+
 async function api(path, body) {
+  if (DEMO) return demoApi(path, body || {});
   const r = await fetch(path, {
     method: body ? "POST" : "GET",
     headers: { "content-type": "application/json", ...(sid() ? { authorization: `Bearer ${sid()}` } : {}) },
@@ -161,7 +182,8 @@ async function send() {
     });
     res.className = "result ok";
     res.innerHTML = `<strong>Sent ${qty()} × ${escapeHtml(picked.partName)}.</strong><br>` +
-      `${r.waiting} job${r.waiting === 1 ? "" : "s"} waiting at the laser. Open Laser Station there and load it.`;
+      `${r.waiting} job${r.waiting === 1 ? "" : "s"} waiting at the laser. Open Laser Station there and load it.` +
+      (DEMO ? "<br><em>Demo: nothing was really sent.</em>" : "");
     post("showMessageBubble", { message: `Sent ${picked.partName} to the laser` });
   } catch (err) {
     res.className = "result bad";
@@ -190,12 +212,13 @@ async function start() {
   const okHost = new RegExp(cfg.apiHostPattern || "^https://([a-z0-9-]+\\.)?onshape\\.com$");
   const candidates = [...(location.ancestorOrigins || [])];
   try { if (document.referrer) candidates.push(new URL(document.referrer).origin); } catch { /* no referrer */ }
-  parentOrigin = candidates.find((o) => okHost.test(o)) || null;
+  parentOrigin = DEMO ? location.origin : candidates.find((o) => okHost.test(o)) || null;
   if (!parentOrigin) $("foot-msg").textContent = "Open this inside Onshape.";
+  if (DEMO) $("foot-msg").textContent = "Demo: nothing is sent anywhere";
   window.addEventListener("message", onMessage);
   post("applicationInit");
 
-  if (!sid()) { showSignIn(); return; }
+  if (!sid() && !DEMO) { showSignIn(); return; }
   try {
     await api("/api/me");
   } catch {
@@ -203,7 +226,7 @@ async function start() {
   }
   $("signin").hidden = true;
   $("main").hidden = false;
-  $("signout").hidden = false;
+  $("signout").hidden = DEMO;
   post("requestSelection", { messageId: "laser-top-face", entityTypeSpecifier: ["FACE"] });
   updateSend();
 }

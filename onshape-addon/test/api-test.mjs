@@ -71,7 +71,7 @@ check("deleted job is gone", (await station(`/api/station/jobs/${s.id}/step`)).s
 
 r = await fetch(`${W}/panel.html`);
 const csp = r.headers.get("content-security-policy") || "";
-check("panel only embeddable in Onshape", /frame-ancestors https:\/\/\*\.onshape\.com/.test(csp), csp);
+check("panel only embeddable in Onshape (and the demo page)", /frame-ancestors 'self' https:\/\/\*\.onshape\.com/.test(csp), csp);
 check("signing out ends the session", (await post("/api/signout", sid, {})).ok && (await post("/api/face", sid, { ...DOC, faceId: "JHO" })).status === 401);
 
 console.log(`${pass}/${pass + fail} passed`);
